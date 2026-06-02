@@ -635,38 +635,28 @@ input{outline:none;border:none;}
       <div id="panel-match" class="lobby-panel">
         <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;gap:16px;">
           <div class="match-card">
-            <div class="match-title">⚔️ 选择匹配模式</div>
+            <div class="match-title">⚔️ 开始游戏</div>
             <div class="match-modes">
-              <button class="mode-btn selected" id="mode-solo" onclick="selectMode('solo')">
-                <div class="mode-icon">👤</div>
-                <div class="mode-name">单人匹配</div>
-                <div class="mode-desc">随机组队或独行</div>
-              </button>
-              <button class="mode-btn" id="mode-duo" onclick="selectMode('duo')">
-                <div class="mode-icon">👥</div>
-                <div class="mode-name">组队匹配</div>
-                <div class="mode-desc">与好友一起对战</div>
-              </button>
-              <button class="mode-btn" id="mode-random" onclick="selectMode('random')">
-                <div class="mode-icon">🎲</div>
-                <div class="mode-name">随机匹配</div>
-                <div class="mode-desc">随机分配一队</div>
-              </button>
-              <button class="mode-btn" id="mode-create" onclick="selectMode('create')">
+              <button class="mode-btn selected" id="mode-create" onclick="selectMode('create')">
                 <div class="mode-icon">🔑</div>
                 <div class="mode-name">创建房间</div>
-                <div class="mode-desc">生成队伍码邀友</div>
+                <div class="mode-desc">生成房间码邀请好友</div>
+              </button>
+              <button class="mode-btn" id="mode-join" onclick="selectMode('join')">
+                <div class="mode-icon">🚪</div>
+                <div class="mode-name">加入房间</div>
+                <div class="mode-desc">输入好友的房间码</div>
               </button>
             </div>
             <div class="team-code-wrap" id="team-code-wrap" style="display:none;">
-              <input class="team-code-input" id="team-code-input" placeholder="输入队友的队伍码" maxlength="8">
-              <button class="btn-full" style="background:var(--bg-panel);color:var(--text);border:1px solid var(--border);border-radius:7px;padding:9px;margin-top:8px;font-size:0.85rem;" onclick="createTeamCode()">生成我的队伍码</button>
+              <input class="team-code-input" id="team-code-input" placeholder="输入房间码（6位字母+数字）" maxlength="6"
+                style="text-transform:uppercase;"
+                onkeydown="if(event.key==='Enter')startQueue()">
             </div>
-            <button class="btn-full green" id="start-queue-btn" onclick="startQueue()">开始匹配</button>
-            <button class="btn-full red" id="cancel-queue-btn" onclick="cancelQueue()">取消匹配</button>
-            <div class="queue-status" id="queue-status">
-              <span class="queue-dot"></span>
-              <span id="queue-status-text">匹配中... 已等待 <span id="queue-time">0</span>s · 队列 <span id="queue-pos">1</span> 人</span>
+            <button class="btn-full green" id="start-queue-btn" onclick="startQueue()">创建房间</button>
+            <div style="font-size:0.75rem;color:var(--text-dim);text-align:center;margin-top:8px;line-height:1.6;">
+              创建房间后把 <b style="color:var(--accent)">6位房间码</b> 发给朋友<br>
+              朋友选"加入房间"输入后即可同局对战
             </div>
           </div>
         </div>
@@ -843,7 +833,7 @@ input{outline:none;border:none;}
 <div class="toast" id="toast"></div>
 
 <!-- ══════════════════ Scripts ══════════════════ -->
-<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://unpkg.com/three@0.134.0/build/three.min.js"></script>
 <script>
 'use strict';
@@ -851,14 +841,47 @@ input{outline:none;border:none;}
 // ─────────────────────────────────────────────────────────────────────────────
 //  全局状态
 // ─────────────────────────────────────────────────────────────────────────────
-// 服务器地址自动检测：
-//   · 通过服务器访问（http/https）→ 使用相同 origin（本地 = localhost:3000，线上 = 你的域名）
-//   · 直接双击打开本地文件（file://）→ 回退到 localhost:3000
-// 如需强制指定线上地址，把下面改成：const SERVER_URL = 'https://你的域名.railway.app';
-const SERVER_URL = (window.location.protocol === 'file:')
-    ? 'http://localhost:3000'
-    : window.location.origin;
-let socket = null;
+// ── Supabase 配置（替代 Socket.IO 服务器）────────────────────────────────────
+const SUPABASE_URL = 'https://qfoaoaggyfhkkvoxyxrb.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_L7NXVjxZwzJgIV4FGu5MUA_PPLbkNUY';
+
+// 商店物品（原来由服务器下发，现在内置客户端）
+const db_shopItems = [
+    { id:'skin_desert',  name:'沙漠迷彩', price:200,  rarity:'普通', color:'#c8a96e' },
+    { id:'skin_woodland',name:'丛林迷彩', price:300,  rarity:'普通', color:'#4a6a3b' },
+    { id:'skin_arctic',  name:'北极迷彩', price:400,  rarity:'稀有', color:'#d8e8f0' },
+    { id:'skin_urban',   name:'城市迷彩', price:500,  rarity:'稀有', color:'#8090a0' },
+    { id:'skin_gold',    name:'金色皮肤', price:1000, rarity:'史诗', color:'#f5c518' },
+    { id:'skin_neon',    name:'霓虹皮肤', price:1500, rarity:'传说', color:'#00ffff' },
+];
+
+let _sb = null;            // Supabase 客户端
+let _lobbyChannel = null;  // 大厅频道
+let _roomChannel  = null;  // 游戏房间频道
+let _currentRoomId = null;
+let _isHost = false;
+let _playerNames = {};     // playerId → name（用于击杀播报）
+let _connectCalled = false;
+
+// 伪 socket 对象（兼容全部现有代码，无需改动游戏逻辑）
+const socket = {
+    connected: false,
+    _h: {},
+    on(ev, fn)     { (this._h[ev] = this._h[ev] || []).push(fn); },
+    once(ev, fn)   { const w = d => { fn(d); this.off(ev, w); }; this.on(ev, w); },
+    off(ev, fn)    { this._h[ev] = (this._h[ev] || []).filter(f => f !== fn); },
+    _fire(ev, data){ (this._h[ev] || []).forEach(fn => fn(data)); },
+    emit(ev, data) { _sbEmit(ev, data); }
+};
+
+// SHA-256 密码哈希（浏览器原生，无需库）
+async function _sha256(str){
+    const buf = await crypto.subtle.digest('SHA-256',
+        new TextEncoder().encode('battlefield_2024_salt:' + str));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+function _genCode(){ return Math.random().toString(36).slice(2,8).toUpperCase(); }
+
 let me = {
     playerId: localStorage.getItem('playerId')    || null,
     name:     localStorage.getItem('playerName')  || '',
@@ -942,69 +965,336 @@ let gameState = {
 })();
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  连接 Socket.IO（只建连，不自动发登录包）
+//  初始化 Supabase（替代 connectSocket）
 // ─────────────────────────────────────────────────────────────────────────────
 function connectSocket(onConnected){
-    if(socket && socket.connected){ onConnected && onConnected(); return; }
-    socket = io(SERVER_URL, { reconnectionDelay: 2000, timeout: 10000 });
+    if(!_sb) _sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    socket.connected = true;
+    if(!_connectCalled){
+        _connectCalled = true;
+        // 认证回调
+        socket.on('auth:loginOk',   data => onAuthSuccess(data));
+        socket.on('auth:registerOk', ({ phone, name, playerId }) => {
+            showToast('注册成功！正在自动登录…');
+            socket.emit('auth:login', { phone, password: _pendingPwd });
+            _pendingPwd = '';
+        });
+        socket.on('auth:error', ({ action, msg }) => {
+            setLoginLoading(false);
+            showLoginErr(action === 'register' ? 'reg-err' : 'login-err', msg);
+        });
+        // 大厅
+        socket.on('chat:lobby',   entry => appendLobbyChat(entry));
+        socket.on('chat:private', entry => appendPrivateChat(entry));
+        socket.on('friend:list',  ({friends}) => renderFriendsList(friends));
+        // 游戏（由房间 Broadcast 触发）
+        socket.on('game:kill',    data => onKillFeed(data));
+        socket.on('game:death',   data => onDeath(data));
+        socket.on('game:respawn', data => onRespawn(data));
+        socket.on('game:end',     data => _onGameEnd(data));
+        // 商店
+        socket.on('shop:buyOk',   data => { me.score=data.newScore; me.skins=data.skins; updateScoreBadge(); renderShop(); showToast('购买成功！皮肤已解锁'); });
+        socket.on('shop:buyFail', data => showToast(`购买失败：${data.reason}`));
+    }
+    onConnected && onConnected();
+}
 
-    socket.on('connect', () => { onConnected && onConnected(); });
-    socket.on('connect_error', () => {
-        showLoginErr('login-err', '无法连接到服务器，请确认服务器已启动');
-        setLoginLoading(false);
-    });
+// ─────────────────────────────────────────────────────────────────────────────
+//  Supabase emit 路由
+// ─────────────────────────────────────────────────────────────────────────────
+async function _sbEmit(ev, data){
+    switch(ev){
+        case 'auth:login':    return _sbLogin(data);
+        case 'auth:register': return _sbRegister(data);
+        case 'chat:lobby':
+            return _lobbyChannel?.send({ type:'broadcast', event:'lobby:chat',
+                payload:{ from:me.name, msg:data.msg, time:Date.now() } });
+        case 'chat:private':
+            return _lobbyChannel?.send({ type:'broadcast', event:'dm',
+                payload:{ fromId:me.playerId, fromName:me.name, toId:data.toId, msg:data.msg, time:Date.now() } });
+        case 'chat:history':  return;
+        case 'friend:list':   return _sbFriendList();
+        case 'friend:add':    return _sbFriendAdd(data);
+        case 'shop:buy':      return _sbShopBuy(data);
+        case 'match:queue':   return;
+        case 'match:cancel':  return _sbLeaveRoom();
+        case 'game:move':
+            return _roomChannel?.send({ type:'broadcast', event:'move',
+                payload:{ id:me.playerId, ...data } });
+        case 'game:shoot':
+            return _roomChannel?.send({ type:'broadcast', event:'shoot',
+                payload:{ fromId:me.playerId, name:me.name, ...data } });
+        case 'game:hit':
+            return _roomChannel?.send({ type:'broadcast', event:'hit',
+                payload:{ fromId:me.playerId, ...data } });
+        case 'game:chat':
+            return _roomChannel?.send({ type:'broadcast', event:'gchat',
+                payload:{ name:me.name, team:gameState.myTeam, msg:data.msg } });
+        default: break;
+    }
+}
 
-    // ── 手机号认证回调 ────────────────────────────────────────────────────────
-    socket.on('auth:loginOk', data => {
-        onAuthSuccess(data);
-    });
-    socket.on('auth:registerOk', ({ phone, name, playerId }) => {
-        showToast('注册成功！正在自动登录…');
-        // 自动用刚注册的账号登录
-        socket.emit('auth:login', { phone, password: _pendingPwd });
-        _pendingPwd = '';
-    });
-    socket.on('auth:error', ({ action, msg }) => {
-        setLoginLoading(false);
-        const errId = action === 'register' ? 'reg-err' : 'login-err';
-        showLoginErr(errId, msg);
-    });
+// ─────────────────────────────────────────────────────────────────────────────
+//  认证
+// ─────────────────────────────────────────────────────────────────────────────
+async function _sbLogin({ phone, password }){
+    try{
+        const hash = await _sha256(password);
+        const { data, error } = await _sb.from('bf_users').select('*').eq('phone', phone).single();
+        if(error || !data) return socket._fire('auth:error',{ action:'login', msg:'账号不存在，请先注册' });
+        if(data.pwd_hash !== hash) return socket._fire('auth:error',{ action:'login', msg:'密码错误' });
+        const lb = await _sbGetLeaderboard();
+        socket._fire('auth:loginOk',{
+            playerId:data.id, name:data.name, phone:data.phone,
+            score:data.score||0, kills:data.kills||0, skins:data.skins||[],
+            shopItems:db_shopItems, leaderboard:lb
+        });
+    }catch(e){ socket._fire('auth:error',{ action:'login', msg:'网络错误：'+e.message }); }
+}
 
-    // ── 大厅事件 ─────────────────────────────────────────────────────────────
-    socket.on('lobby:online', count => {
-        document.getElementById('online-count').textContent = count;
-    });
-    socket.on('chat:lobby',   entry => appendLobbyChat(entry));
-    socket.on('chat:private', entry => appendPrivateChat(entry));
-    socket.on('chat:history', ({channelId, messages}) => {
-        messages.forEach(m => appendPrivateChat(m, true));
-    });
-    socket.on('friend:request', ({fromId, fromName}) => {
-        showToast(`${fromName} 请求添加你为好友`);
-        if(confirm(`${fromName} 想添加你为好友，是否同意？`)){
-            socket.emit('friend:accept', { fromId });
+async function _sbRegister({ phone, name, password }){
+    try{
+        const hash = await _sha256(password);
+        const { data, error } = await _sb.from('bf_users').insert({ phone, name, pwd_hash:hash }).select().single();
+        if(error){
+            return socket._fire('auth:error',{ action:'register',
+                msg: error.code==='23505'?'该手机号已注册':'注册失败：'+error.message });
         }
+        socket._fire('auth:registerOk',{ phone, name, playerId:data.id });
+    }catch(e){ socket._fire('auth:error',{ action:'register', msg:'网络错误：'+e.message }); }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  排行榜
+// ─────────────────────────────────────────────────────────────────────────────
+async function _sbGetLeaderboard(){
+    const { data } = await _sb.from('bf_users')
+        .select('id,name,score,kills,deaths,wins')
+        .order('score',{ ascending:false }).limit(50);
+    return data || [];
+}
+async function sbLoadLeaderboard(){
+    const lb = await _sbGetLeaderboard();
+    renderLeaderboard(lb);
+    renderMiniLeaderboard(lb);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  大厅频道（在线人数 + 全局聊天 + 私信）
+// ─────────────────────────────────────────────────────────────────────────────
+function _initLobbyChannel(){
+    if(_lobbyChannel){ _sb.removeChannel(_lobbyChannel); _lobbyChannel=null; }
+    _lobbyChannel = _sb.channel('bf:lobby', { config:{ presence:{ key:me.playerId } } });
+    _lobbyChannel
+        .on('presence','sync', ()=>{
+            const cnt = Object.keys(_lobbyChannel.presenceState()).length;
+            document.getElementById('online-count').textContent = cnt;
+        })
+        .on('broadcast',{ event:'lobby:chat' }, ({ payload }) => socket._fire('chat:lobby', payload))
+        .on('broadcast',{ event:'dm' }, ({ payload }) => {
+            if(payload.toId === me.playerId) socket._fire('chat:private', payload);
+        })
+        .subscribe(async st =>{
+            if(st === 'SUBSCRIBED')
+                await _lobbyChannel.track({ name:me.name, id:me.playerId });
+        });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  好友（本地存储好友ID列表）
+// ─────────────────────────────────────────────────────────────────────────────
+async function _sbFriendList(){
+    const ids = JSON.parse(localStorage.getItem('bf_friends')||'[]');
+    if(!ids.length){ socket._fire('friend:list',{ friends:[] }); return; }
+    const { data } = await _sb.from('bf_users').select('id,name').in('id', ids);
+    socket._fire('friend:list',{ friends:(data||[]).map(u=>`${u.name}#${u.id.slice(0,4)}`) });
+}
+async function _sbFriendAdd({ targetId }){
+    const name = targetId.split('#')[0];
+    const { data } = await _sb.from('bf_users').select('id,name').ilike('name',name).limit(1);
+    if(!data||!data.length){ showToast('找不到玩家：'+name); return; }
+    const ids = JSON.parse(localStorage.getItem('bf_friends')||'[]');
+    if(!ids.includes(data[0].id)){ ids.push(data[0].id); localStorage.setItem('bf_friends',JSON.stringify(ids)); }
+    showToast('已添加好友：'+data[0].name);
+    _sbFriendList();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  商店
+// ─────────────────────────────────────────────────────────────────────────────
+async function _sbShopBuy({ skinId }){
+    const item = db_shopItems.find(s=>s.id===skinId);
+    if(!item) return;
+    if(me.skins.includes(skinId)){ showToast('已拥有此皮肤'); return; }
+    if(me.score < item.price){ socket._fire('shop:buyFail',{ reason:'积分不足' }); return; }
+    const newScore = me.score - item.price;
+    const newSkins = [...me.skins, skinId];
+    const { error } = await _sb.from('bf_users').update({ score:newScore, skins:newSkins }).eq('id',me.playerId);
+    if(error){ socket._fire('shop:buyFail',{ reason:error.message }); return; }
+    socket._fire('shop:buyOk',{ newScore, skins:newSkins });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  房间 / 匹配（基于房间码，无需服务器）
+// ─────────────────────────────────────────────────────────────────────────────
+async function sbCreateRoom(){
+    const code = _genCode();
+    const mapSeed = Math.floor(Math.random()*0xFFFFFF);
+    const { error } = await _sb.from('bf_rooms').insert({
+        id:code, map_seed:mapSeed, host_id:me.playerId, state:'lobby'
     });
-    socket.on('friend:list',     ({friends}) => renderFriendsList(friends));
-    socket.on('friend:accepted', ({byName})  => showToast(`${byName} 接受了你的好友申请`));
+    if(error){ showToast('创建房间失败：'+error.message); return; }
+    _currentRoomId = code; _isHost = true;
+    _joinRoomChannel(code, mapSeed);
+    _showRoomLobby(code, true);
+}
 
-    socket.on('match:queued',    ({queuePos}) => { document.getElementById('queue-pos').textContent = queuePos; });
-    socket.on('match:cancelled', () => { queueing = false; updateQueueUI(false); });
-    socket.on('match:found',     data => onMatchFound(data));
+async function sbJoinRoom(code){
+    code = code.toUpperCase().trim();
+    if(!code || code.length < 4){ showToast('请输入房间码'); return; }
+    const { data, error } = await _sb.from('bf_rooms').select('*').eq('id',code).single();
+    if(error||!data){ showToast('房间不存在：'+code); return; }
+    if(data.state==='playing'){ showToast('游戏已开始，无法加入'); return; }
+    _currentRoomId = code; _isHost = false;
+    _joinRoomChannel(code, data.map_seed);
+    _showRoomLobby(code, false);
+}
 
-    socket.on('game:state',          data => onGameState(data));
-    socket.on('game:damage',         data => onDamage(data));
-    socket.on('game:kill',           data => onKillFeed(data));
-    socket.on('game:death',          data => onDeath(data));
-    socket.on('game:respawn',        data => onRespawn(data));
-    socket.on('game:shoot',          data => onOtherShoot(data));
-    socket.on('game:grenadeExplode', data => onGrenadeExplode(data));
-    socket.on('game:chat',           data => appendGameChat(data));
-    socket.on('game:playerLeft',     data => showAnnounce(`${data.name} 已离开`));
-    socket.on('game:end',            data => onGameEnd(data));
+function _joinRoomChannel(roomId, mapSeed){
+    if(_roomChannel){ _sb.removeChannel(_roomChannel); _roomChannel=null; }
+    _roomChannel = _sb.channel('bf:room:'+roomId, { config:{ presence:{ key:me.playerId } } });
+    _roomChannel
+        .on('presence','sync', ()=> _updateRoomPresence())
+        .on('broadcast',{ event:'room:start' }, ({ payload }) => _onRoomStart(payload))
+        .on('broadcast',{ event:'move' },  ({ payload }) => onGameMove(payload))
+        .on('broadcast',{ event:'shoot' }, ({ payload }) => onOtherShoot(payload))
+        .on('broadcast',{ event:'hit' },   ({ payload }) => _onHit(payload))
+        .on('broadcast',{ event:'kill' },  ({ payload }) => {
+            _playerNames[payload.killerId] = payload.killerName;
+            socket._fire('game:kill', payload);
+        })
+        .on('broadcast',{ event:'respawn'}, ({ payload }) => {
+            const op = gOtherPlayers[payload.id];
+            if(op){ op.alive=true; op.hp=payload.hp; op.mesh.visible=true;
+                op.mesh.position.set(payload.pos.x,payload.pos.y,payload.pos.z); }
+        })
+        .on('broadcast',{ event:'gchat' }, ({ payload }) => appendGameChat(payload))
+        .on('broadcast',{ event:'game:end'},({ payload }) => _onGameEnd(payload))
+        .subscribe(async st=>{
+            if(st==='SUBSCRIBED')
+                await _roomChannel.track({ name:me.name, id:me.playerId, joinTime:Date.now() });
+        });
+}
 
-    socket.on('shop:buyOk',   data => { me.score=data.newScore; me.skins=data.skins; updateScoreBadge(); renderShop(); showToast('购买成功！皮肤已解锁'); });
-    socket.on('shop:buyFail', data => showToast(`购买失败：${data.reason}`));
+function _updateRoomPresence(){
+    const state = _roomChannel?.presenceState()||{};
+    const players = Object.values(state).map(a=>a[0]).filter(Boolean);
+    players.forEach(p=>{ _playerNames[p.id]=p.name; });
+    const el = document.getElementById('room-player-list');
+    if(el) el.innerHTML = players.map(p=>`<div class="room-player-item">👤 ${escHtml(p.name)}</div>`).join('');
+    const btn = document.getElementById('room-start-btn');
+    if(btn) btn.textContent = `开始游戏（${players.length} 人）`;
+}
+
+function _showRoomLobby(code, isHost){
+    document.getElementById('room-lobby-overlay')?.remove();
+    const div = document.createElement('div');
+    div.id = 'room-lobby-overlay';
+    div.style.cssText = 'position:fixed;inset:0;background:rgba(6,10,15,0.96);display:flex;align-items:center;justify-content:center;z-index:9999;flex-direction:column;gap:20px;';
+    div.innerHTML = `
+        <div style="font-size:2rem;font-weight:700;color:var(--accent);">🔑 房间码：${code}</div>
+        <div style="color:var(--text-dim);font-size:0.88rem;">把此房间码发给朋友 → 他们在"加入房间"输入框里输入即可加入</div>
+        <div id="room-player-list" style="min-width:280px;background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:8px;">
+            <div style="color:var(--text-dim);">等待玩家加入…</div>
+        </div>
+        ${isHost
+            ? `<button id="room-start-btn" onclick="sbStartRoom()" style="padding:14px 48px;background:linear-gradient(135deg,#1a6b35,#27ae60);color:#fff;border-radius:8px;font-size:1rem;font-weight:600;cursor:pointer;border:none;transition:all 0.2s;">开始游戏（1 人）</button>`
+            : `<div style="color:var(--text-dim);font-size:0.9rem;">⏳ 等待房主开始游戏…</div>`}
+        <button onclick="sbLeaveRoomAndClose()" style="padding:8px 24px;background:transparent;color:var(--text-dim);border:1px solid var(--border);border-radius:6px;cursor:pointer;">离开房间</button>`;
+    document.body.appendChild(div);
+}
+function sbLeaveRoomAndClose(){
+    _sbLeaveRoom();
+    document.getElementById('room-lobby-overlay')?.remove();
+    updateQueueUI(false);
+}
+
+async function sbStartRoom(){
+    if(!_isHost){ showToast('只有房主才能开始游戏'); return; }
+    const state = _roomChannel?.presenceState()||{};
+    const players = Object.values(state).map(a=>a[0]).filter(Boolean);
+    if(players.length < 2){ showToast('至少需要2名玩家'); return; }
+
+    const mapSeed  = Math.floor(Math.random()*0xFFFFFF);
+    const TC = ['#e74c3c','#3498db','#2ecc71','#f39c12'];
+    const TN = ['红队','蓝队','绿队','黄队'];
+    const SZ = [{x:8,z:8},{x:32,z:8},{x:8,z:32},{x:32,z:32}];
+
+    const teams=[]; const playersArr=[];
+    for(let ti=0; ti<4 && ti*2<players.length; ti++){
+        const tps = players.slice(ti*2, ti*2+2);
+        teams.push({ teamIdx:ti, color:TC[ti], name:TN[ti], players:tps.map(p=>p.id), spawn:SZ[ti] });
+        tps.forEach((p,pi)=>{
+            const sp=SZ[ti];
+            playersArr.push({ id:p.id, name:p.name, teamIdx:ti,
+                hp:100, kills:0, deaths:0, alive:true,
+                pos:{ x:(sp.x+(pi===0?-1.5:1.5))*3, y:0.8, z:sp.z*3 } });
+        });
+    }
+    const gameData = { roomId:_currentRoomId, mapSeed, teams, players:playersArr, duration:300 };
+    await _sb.from('bf_rooms').update({ state:'playing' }).eq('id',_currentRoomId);
+    _roomChannel.send({ type:'broadcast', event:'room:start', payload:gameData });
+    _onRoomStart(gameData);
+}
+
+function _onRoomStart(data){
+    document.getElementById('room-lobby-overlay')?.remove();
+    onMatchFound(data);
+}
+
+async function _sbLeaveRoom(){
+    if(_roomChannel){ await _roomChannel.untrack(); _sb.removeChannel(_roomChannel); _roomChannel=null; }
+    if(_currentRoomId && _isHost)
+        await _sb.from('bf_rooms').delete().eq('id',_currentRoomId);
+    _currentRoomId=null; _isHost=false;
+}
+
+// ─── 被击中处理（客户端权威）───────────────────────────────────────────────
+function _onHit({ fromId, targetId, damage }){
+    if(targetId !== me.playerId) return;
+    onDamage({ damage });
+    if(gameState.hp <= 0 && !gameState.respawning){
+        gameState.respawning = true;
+        _roomChannel?.send({ type:'broadcast', event:'kill', payload:{
+            killerId:fromId, killerName:_playerNames[fromId]||'?',
+            deadId:me.playerId, victimName:me.name
+        }});
+        socket._fire('game:death', {});
+        // 5秒后自动复活
+        setTimeout(()=>{
+            const myTeam = gameState.teams?.find(t=>t.players.includes(me.playerId));
+            const sp = myTeam?.spawn || {x:8,z:8};
+            const pos = { x:sp.x*3, y:0.8, z:sp.z*3 };
+            socket._fire('game:respawn', { hp:100, pos });
+            _roomChannel?.send({ type:'broadcast', event:'respawn',
+                payload:{ id:me.playerId, hp:100, pos } });
+        }, 5000);
+    }
+}
+
+// ─── 游戏结束（写分数）────────────────────────────────────────────────────
+async function _onGameEnd(data){
+    socket._fire('game:end', data);
+    // 更新本地积分到数据库
+    const myResult = data.results?.flatMap(t=>t.players||[]).find(p=>p.id===me.playerId);
+    if(myResult && _sb){
+        const won = data.results[0]?.players?.some(p=>p.id===me.playerId);
+        const add = (myResult.kills||0)*10 + (won?50:0);
+        me.score += add; me.kills += (myResult.kills||0); if(won) me.wins++;
+        updateScoreBadge();
+        await _sb.from('bf_users').update({ score:me.score, kills:me.kills, wins:me.wins, deaths:(me.deaths||0)+(myResult.deaths||0) }).eq('id',me.playerId);
+    }
+    _sbLeaveRoom();
 }
 
 // 登录成功后统一入口
@@ -1027,7 +1317,8 @@ function onAuthSuccess(data){
     showPage('lobby');
     showPanel('home');
     document.getElementById('player-name-badge').textContent = me.name;
-    setTimeout(()=>{ if(socket) socket.emit('friend:list'); }, 600);
+    _initLobbyChannel();
+    setTimeout(()=>{ socket.emit('friend:list'); sbLoadLeaderboard(); }, 600);
 }
 
 let _pendingPwd = '';
@@ -1127,7 +1418,7 @@ function showPanel(id){
     document.getElementById('nav-'+id)?.classList.add('active');
     const titles = {home:'大厅',match:'匹配',leaderboard:'排行榜',friends:'好友',shop:'皮肤商店',minigames:'小游戏'};
     document.getElementById('header-title').textContent = titles[id]||'';
-    if(id==='leaderboard' && socket) socket.emit('friend:list');
+    if(id==='leaderboard'){ sbLoadLeaderboard(); socket.emit('friend:list'); }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1136,48 +1427,28 @@ function showPanel(id){
 function selectMode(m){
     queueMode = m;
     document.querySelectorAll('.mode-btn').forEach(b=>b.classList.remove('selected'));
-    document.getElementById('mode-'+m).classList.add('selected');
-    document.getElementById('team-code-wrap').style.display = (m==='duo'||m==='create') ? 'block' : 'none';
-}
-
-function createTeamCode(){
-    if(!socket) return;
-    socket.emit('team:create');
-    socket.once('team:created', ({code})=>{
-        document.getElementById('team-code-input').value = code;
-        showToast(`队伍码：${code}  已复制到输入框，分享给队友`);
-    });
+    document.getElementById('mode-'+m)?.classList.add('selected');
+    const wrap = document.getElementById('team-code-wrap');
+    const btn  = document.getElementById('start-queue-btn');
+    if(m === 'join'){
+        wrap.style.display = 'block'; btn.textContent = '加入房间';
+    } else {
+        wrap.style.display = 'none';  btn.textContent = '创建房间';
+    }
 }
 
 function startQueue(){
-    if(!socket){ showToast('请先连接服务器'); return; }
-    const code = document.getElementById('team-code-input').value.trim();
-    if((queueMode==='duo') && code) {
-        socket.emit('team:join', { code });
+    if(queueMode === 'join'){
+        const code = document.getElementById('team-code-input').value.trim();
+        sbJoinRoom(code);
+    } else {
+        sbCreateRoom();
     }
-    socket.emit('match:queue', { mode: queueMode==='create'?'duo':queueMode });
-    queueing = true;
-    queueTimer = 0;
-    clearInterval(queueInterval);
-    queueInterval = setInterval(()=>{
-        queueTimer++;
-        document.getElementById('queue-time').textContent = queueTimer;
-    }, 1000);
-    updateQueueUI(true);
 }
 
-function cancelQueue(){
-    if(socket) socket.emit('match:cancel');
-    clearInterval(queueInterval);
-    queueing = false;
-    updateQueueUI(false);
-}
+function cancelQueue(){ _sbLeaveRoom(); }
 
-function updateQueueUI(inQueue){
-    document.getElementById('start-queue-btn').style.display = inQueue ? 'none' : 'block';
-    document.getElementById('cancel-queue-btn').style.display = inQueue ? 'block' : 'none';
-    document.getElementById('queue-status').style.display = inQueue ? 'block' : 'none';
-}
+function updateQueueUI(){ /* 不再需要队列UI，房间大厅由 overlay 控制 */ }
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  匹配成功 → 启动游戏
@@ -1193,15 +1464,17 @@ function onMatchFound(data){
 
     // 找我的队伍
     for(const team of data.teams){
-        if(team.players.includes(socket.id)){
+        if(team.players.includes(me.playerId)){
             gameState.myTeam = team.teamIdx;
             break;
         }
     }
 
-    // 初始化玩家状态
+    // 初始化玩家状态（data.players 是数组）
     gameState.players = {};
-    for(const p of data.players){ gameState.players[p.id] = p; }
+    for(const p of (Array.isArray(data.players)?data.players:Object.values(data.players||{}))){
+        gameState.players[p.id] = p;
+    }
     gameState.hp = 100;
     gameState.kills = 0;
 
@@ -1489,7 +1762,7 @@ function initGame(matchData){
     buildMap(matchData.mapSeed);
 
     // 我的角色
-    const myData = gameState.players[socket.id];
+    const myData = gameState.players[me.playerId];
     if(myData){
         gCamera.position.set(myData.pos.x, myData.pos.y + 1.0, myData.pos.z);
         gYaw = 0; gPitch = 0;
@@ -1498,7 +1771,7 @@ function initGame(matchData){
     // 其他玩家
     gOtherPlayers = {};
     for(const [sid, p] of Object.entries(gameState.players)){
-        if(sid === socket.id) continue;
+        if(sid === me.playerId) continue;
         spawnOtherPlayer(sid, p);
     }
 
@@ -1632,6 +1905,26 @@ function gameLoop(){
     gameState.timeLeft -= dt;
     updateTimerHUD();
 
+    // 主机端：时间到 → 广播游戏结束
+    if(_isHost && gameState.timeLeft <= 0 && gameState.active){
+        gameState.active = false;
+        const teams = gameState.teams || [];
+        const allPlayers = Object.values(gameState.players || {});
+        const results = teams.map(t=>({
+            teamName:t.name, color:t.color,
+            players: t.players.map(pid=>{
+                const p = allPlayers.find(x=>x.id===pid)||{id:pid,name:'?',kills:0,deaths:0};
+                return { id:p.id, name:p.name, kills:p.kills||0, deaths:p.deaths||0 };
+            }),
+            kills: t.players.reduce((s,pid)=>{
+                const p=allPlayers.find(x=>x.id===pid); return s+(p?.kills||0);
+            },0)
+        })).sort((a,b)=>b.kills-a.kills);
+        const endData = { results };
+        _roomChannel?.send({ type:'broadcast', event:'game:end', payload:endData });
+        _onGameEnd(endData);
+    }
+
     // 玩家移动
     movePlayer(dt);
 
@@ -1728,7 +2021,7 @@ function onGameState(data){
     gameState.timeLeft = data.remaining;
     // 更新其他玩家位置
     for(const p of data.players){
-        if(p.id === socket.id) continue;
+        if(p.id === me.playerId) continue;
         if(!gOtherPlayers[p.id]){
             spawnOtherPlayer(p.id, p);
         }
@@ -1887,7 +2180,7 @@ function onRespawn(data){
 
 function onKillFeed(data){
     addKillFeedEntry(data);
-    if(data.killerId === socket.id){
+    if(data.killerId === me.playerId){
         gameState.kills++;
         showAnnounce(`击杀 ${data.victimName}！ +10 分`);
     }
@@ -1900,6 +2193,20 @@ function addKillFeedEntry(data){
     div.innerHTML=`<span style="color:var(--accent)">${escHtml(data.killerName)}</span> 击杀 <span style="color:var(--red)">${escHtml(data.victimName)}</span>`;
     el.appendChild(div);
     setTimeout(()=>div.remove(), 4000);
+}
+
+// 接收其他玩家的移动更新
+function onGameMove({ id, pos, rot }){
+    if(id === me.playerId) return;
+    let op = gOtherPlayers[id];
+    if(!op){
+        const pd = gameState.players[id];
+        if(pd){ spawnOtherPlayer(id, pd); op = gOtherPlayers[id]; }
+    }
+    if(op && op.alive){
+        op.mesh.position.set(pos.x, pos.y, pos.z);
+        op.mesh.rotation.y = rot?.y || 0;
+    }
 }
 
 function onOtherShoot(data){
@@ -1947,7 +2254,7 @@ function onGameEnd(data){
     unlockPointer();
 
     const win = data.results[0];
-    const isWinner = win.players.some(p=>p.id===socket.id);
+    const isWinner = win.players.some(p=>p.id===me.playerId);
     document.getElementById('end-title').textContent = isWinner ? '🏆 胜利！' : '💀 失败';
     document.getElementById('end-subtitle').textContent = `${win.teamName} 获得胜利`;
 
@@ -1975,8 +2282,9 @@ function backToLobby(){
     cancelAnimationFrame(gAnimId); gAnimId=null;
     showPage('lobby');
     showPanel('home');
-    // 请求最新排行榜
-    if(socket) socket.emit('friend:list');
+    // 刷新排行榜和好友
+    sbLoadLeaderboard();
+    socket.emit('friend:list');
 }
 
 // ─── 鼠标锁定 ────────────────────────────────────────────────────────────────
