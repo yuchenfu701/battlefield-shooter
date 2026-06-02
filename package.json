@@ -1,0 +1,11 @@
+{
+  "name": "battlefield-shooter",
+  "version": "1.0.0",
+  "description": "战地射击 - 多人联机射击游戏",
+  "scripts": {
+    "start": "cd server && npm install && node server.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
