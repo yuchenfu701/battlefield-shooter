@@ -1,0 +1,32 @@
+{
+  "name": "battlefield-online",
+  "version": "1.0.0",
+  "description": "战地射击 - 多人联机桌面版",
+  "main": "main.js",
+  "scripts": {
+    "start":    "electron .",
+    "dev":      "NODE_ENV=development electron .",
+    "dist-win": "electron-builder --win"
+  },
+  "build": {
+    "appId":       "com.battlefield.online",
+    "productName": "战地射击·联机版",
+    "win": {
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "icon":   "assets/icon.ico"
+    },
+    "extraResources": [
+      { "from": "../server",      "to": "server"      },
+      { "from": "../multiplayer", "to": "multiplayer" }
+    ],
+    "files": ["main.js", "preload.js", "assets/**"]
+  },
+  "dependencies": {
+    "express":   "^4.18.2",
+    "socket.io": "^4.7.2"
+  },
+  "devDependencies": {
+    "electron":         "^28.0.0",
+    "electron-builder": "^24.0.0"
+  }
+}

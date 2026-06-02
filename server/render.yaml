@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: battlefield-shooter
+    runtime: node
+    rootDir: server
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+    disk:
+      name: accounts-data
+      mountPath: /data
+      sizeGB: 1

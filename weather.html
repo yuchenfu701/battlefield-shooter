@@ -1,0 +1,1077 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>战场天气系统 — 可视化</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#000;overflow:hidden;font-family:'Segoe UI',sans-serif;}
+canvas{display:block;}
+
+/* ── 顶部标题 ── */
+#title-bar{
+  position:fixed;top:0;left:0;right:0;
+  padding:10px 20px;
+  background:linear-gradient(to bottom,rgba(0,0,0,.65),transparent);
+  color:#fff;font-size:15px;letter-spacing:2px;
+  pointer-events:none;z-index:100;
+  text-shadow:0 0 12px rgba(0,180,255,.5);
+}
+#title-bar span{color:#4af;font-weight:bold;}
+
+/* ── 左侧天气面板 ── */
+#weather-panel{
+  position:fixed;top:50%;left:18px;transform:translateY(-50%);
+  width:210px;
+  background:rgba(5,12,20,.82);
+  border:1px solid rgba(80,160,255,.25);
+  border-radius:12px;
+  backdrop-filter:blur(8px);
+  padding:16px 14px;
+  color:#cde;
+  z-index:100;
+  box-shadow:0 4px 32px rgba(0,0,0,.6),inset 0 0 30px rgba(0,80,160,.05);
+}
+#weather-panel h3{
+  font-size:11px;letter-spacing:3px;color:#7ad;
+  text-transform:uppercase;margin-bottom:12px;
+  border-bottom:1px solid rgba(80,160,255,.18);padding-bottom:7px;
+}
+.wp-label{font-size:11px;color:#89a;margin:10px 0 5px;letter-spacing:1px;}
+.wx-btn-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:4px;}
+.wx-btn{
+  padding:7px 4px;border:1px solid rgba(80,160,255,.22);
+  background:rgba(20,40,70,.5);color:#9bc;
+  border-radius:7px;font-size:12px;cursor:pointer;
+  transition:all .18s;text-align:center;
+}
+.wx-btn:hover{background:rgba(40,100,180,.5);border-color:rgba(80,180,255,.5);color:#fff;}
+.wx-btn.active{
+  background:rgba(30,100,200,.55);
+  border-color:rgba(80,200,255,.7);
+  color:#6ef;
+  box-shadow:0 0 10px rgba(50,150,255,.3);
+}
+.wp-slider{width:100%;accent-color:#4af;margin:4px 0 10px;}
+.wp-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;}
+.wp-row label{font-size:11px;color:#89a;}
+.wp-row span{font-size:12px;color:#adf;font-variant-numeric:tabular-nums;}
+.wp-toggle{
+  display:flex;align-items:center;gap:8px;
+  font-size:11px;color:#89a;margin-top:10px;
+  cursor:pointer;user-select:none;
+}
+.wp-toggle input{accent-color:#4af;}
+
+/* ── 右侧信息面板 ── */
+#info-panel{
+  position:fixed;top:50%;right:18px;transform:translateY(-50%);
+  width:180px;
+  background:rgba(5,12,20,.82);
+  border:1px solid rgba(80,160,255,.25);
+  border-radius:12px;
+  backdrop-filter:blur(8px);
+  padding:16px 14px;
+  color:#cde;z-index:100;
+  box-shadow:0 4px 32px rgba(0,0,0,.6);
+  font-size:12px;
+}
+#info-panel h3{
+  font-size:11px;letter-spacing:3px;color:#7ad;
+  text-transform:uppercase;margin-bottom:12px;
+  border-bottom:1px solid rgba(80,160,255,.18);padding-bottom:7px;
+}
+.info-row{
+  display:flex;justify-content:space-between;
+  margin-bottom:8px;padding-bottom:8px;
+  border-bottom:1px solid rgba(255,255,255,.05);
+}
+.info-row:last-child{border-bottom:none;}
+.info-key{color:#789;font-size:11px;}
+.info-val{color:#aef;font-weight:bold;}
+
+/* ── 底部时间轴 ── */
+#time-bar{
+  position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
+  width:min(500px,85vw);
+  background:rgba(5,12,20,.82);
+  border:1px solid rgba(80,160,255,.25);
+  border-radius:30px;
+  backdrop-filter:blur(8px);
+  padding:12px 20px;
+  color:#cde;z-index:100;
+  display:flex;align-items:center;gap:14px;
+}
+#time-display{font-size:18px;font-weight:bold;color:#6df;min-width:52px;
+  font-variant-numeric:tabular-nums;text-shadow:0 0 10px rgba(100,200,255,.4);}
+#time-slider{flex:1;accent-color:#4af;}
+#time-icon{font-size:20px;}
+#weather-name-badge{
+  position:fixed;top:52px;left:50%;transform:translateX(-50%);
+  background:rgba(5,12,20,.75);
+  border:1px solid rgba(80,160,255,.25);
+  border-radius:20px;padding:5px 18px;
+  color:#6df;font-size:14px;letter-spacing:2px;
+  backdrop-filter:blur(4px);pointer-events:none;z-index:100;
+  transition:all .6s ease;
+}
+</style>
+</head>
+<body>
+
+<div id="title-bar">⚡ <span>战场天气系统</span> — 实时可视化模拟器</div>
+<div id="weather-name-badge" id="wx-badge">☀️ 晴天</div>
+
+<!-- 左侧控制面板 -->
+<div id="weather-panel">
+  <h3>🌤 天气控制</h3>
+
+  <div class="wp-label">天气类型</div>
+  <div class="wx-btn-grid">
+    <button class="wx-btn active" data-wx="clear">☀️ 晴天</button>
+    <button class="wx-btn" data-wx="rain">🌧 暴雨</button>
+    <button class="wx-btn" data-wx="snow">❄️ 大雪</button>
+    <button class="wx-btn" data-wx="fog">🌫 浓雾</button>
+    <button class="wx-btn" data-wx="storm">⛈ 雷暴</button>
+    <button class="wx-btn" data-wx="dust">🌪 沙尘</button>
+  </div>
+
+  <div class="wp-label">风速</div>
+  <input type="range" class="wp-slider" id="wind-slider" min="0" max="100" value="20">
+  <div class="wp-row">
+    <label>风速值</label><span id="wind-val">20 km/h</span>
+  </div>
+
+  <div class="wp-label">雨雪密度</div>
+  <input type="range" class="wp-slider" id="density-slider" min="10" max="100" value="50">
+  <div class="wp-row">
+    <label>粒子密度</label><span id="density-val">50%</span>
+  </div>
+
+  <div class="wp-label">能见度</div>
+  <input type="range" class="wp-slider" id="fog-slider" min="0" max="100" value="80">
+  <div class="wp-row">
+    <label>能见度</label><span id="fog-val">80%</span>
+  </div>
+
+  <label class="wp-toggle">
+    <input type="checkbox" id="auto-cycle"> 🔄 自动天气循环
+  </label>
+  <label class="wp-toggle" style="margin-top:6px;">
+    <input type="checkbox" id="auto-time" checked> ⏱ 自动时间推进
+  </label>
+</div>
+
+<!-- 右侧信息面板 -->
+<div id="info-panel">
+  <h3>📊 实时数据</h3>
+  <div class="info-row"><span class="info-key">天气</span><span class="info-val" id="i-wx">晴天</span></div>
+  <div class="info-row"><span class="info-key">时段</span><span class="info-val" id="i-slot">上午</span></div>
+  <div class="info-row"><span class="info-key">气温</span><span class="info-val" id="i-temp">24°C</span></div>
+  <div class="info-row"><span class="info-key">湿度</span><span class="info-val" id="i-humid">45%</span></div>
+  <div class="info-row"><span class="info-key">风向</span><span class="info-val" id="i-wdir">NNE</span></div>
+  <div class="info-row"><span class="info-key">云量</span><span class="info-val" id="i-cloud">少云</span></div>
+  <div class="info-row"><span class="info-key">光照</span><span class="info-val" id="i-lux">强</span></div>
+  <div class="info-row"><span class="info-key">能见度</span><span class="info-val" id="i-vis">10km+</span></div>
+  <div class="info-row"><span class="info-key">FPS</span><span class="info-val" id="i-fps">—</span></div>
+</div>
+
+<!-- 底部时间轴 -->
+<div id="time-bar">
+  <span id="time-icon">🌅</span>
+  <span id="time-display">06:00</span>
+  <input type="range" id="time-slider" min="0" max="1000" value="250">
+  <span style="font-size:12px;color:#89a;white-space:nowrap;">拖动调时</span>
+</div>
+
+<script src="https://unpkg.com/three@0.134.0/build/three.min.js"></script>
+<script>
+'use strict';
+
+// ═══════════════════════════════════════════
+//  全局变量
+// ═══════════════════════════════════════════
+let gameTime  = 0.25;   // 0~1，0=午夜
+let wxType    = 'clear';
+let windSpeed = 20;     // km/h
+let particleDensity = 0.5;
+let fogVis    = 0.8;
+let autoTime  = true;
+let autoCycle = false;
+let autoTimer = 0;
+let lightningTimer = 0;
+let dustAngle  = 0;
+
+const DIRS = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+let windDirIdx = 2;
+
+// ═══════════════════════════════════════════
+//  Three.js 初始化
+// ═══════════════════════════════════════════
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+document.body.appendChild(renderer.domElement);
+
+const scene  = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.1, 2000);
+camera.position.set(0, 8, 0);
+camera.rotation.x = -0.08;
+
+window.addEventListener('resize', () => {
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+});
+
+// ── 鼠标拖拽旋转视角 ──────────────────────────
+let isDragging = false, prevX = 0, prevY = 0;
+let camYaw = 0, camPitch = -0.08;
+renderer.domElement.addEventListener('mousedown', e => { isDragging=true; prevX=e.clientX; prevY=e.clientY; });
+renderer.domElement.addEventListener('mousemove', e => {
+    if (!isDragging) return;
+    camYaw   -= (e.clientX-prevX)*0.003;
+    camPitch -= (e.clientY-prevY)*0.003;
+    camPitch  = Math.max(-1.4, Math.min(0.6, camPitch));
+    camera.rotation.set(camPitch, camYaw, 0, 'YXZ');
+    prevX=e.clientX; prevY=e.clientY;
+});
+renderer.domElement.addEventListener('mouseup',   ()=>{ isDragging=false; });
+renderer.domElement.addEventListener('mouseleave',()=>{ isDragging=false; });
+
+// ── 触摸支持 ──────────────────────────────────
+renderer.domElement.addEventListener('touchstart', e => {
+    const t=e.touches[0]; isDragging=true; prevX=t.clientX; prevY=t.clientY;
+},{passive:true});
+renderer.domElement.addEventListener('touchmove', e => {
+    if (!isDragging) return;
+    const t=e.touches[0];
+    camYaw   -= (t.clientX-prevX)*0.003;
+    camPitch -= (t.clientY-prevY)*0.003;
+    camPitch  = Math.max(-1.4,Math.min(0.6,camPitch));
+    camera.rotation.set(camPitch,camYaw,0,'YXZ');
+    prevX=t.clientX; prevY=t.clientY;
+},{passive:true});
+renderer.domElement.addEventListener('touchend', ()=>{ isDragging=false; });
+
+// ═══════════════════════════════════════════
+//  灯光
+// ═══════════════════════════════════════════
+const hemiLight = new THREE.HemisphereLight(0xb0d8f0, 0x5a4a28, 1.0);
+scene.add(hemiLight);
+
+const sunLight = new THREE.DirectionalLight(0xfff0d0, 1.0);
+sunLight.position.set(80,120,60);
+sunLight.castShadow = true;
+sunLight.shadow.mapSize.width  = 2048;
+sunLight.shadow.mapSize.height = 2048;
+sunLight.shadow.camera.near   = 1;
+sunLight.shadow.camera.far    = 500;
+sunLight.shadow.camera.left   = -120;
+sunLight.shadow.camera.right  =  120;
+sunLight.shadow.camera.top    =  120;
+sunLight.shadow.camera.bottom = -120;
+scene.add(sunLight);
+
+const moonLight = new THREE.DirectionalLight(0x8888cc, 0.0);
+moonLight.position.set(-60,80,-40);
+scene.add(moonLight);
+
+const ambLight = new THREE.AmbientLight(0x445566, 0.3);
+scene.add(ambLight);
+
+// ═══════════════════════════════════════════
+//  天空穹顶（ShaderMaterial）
+// ═══════════════════════════════════════════
+const skyUniforms = {
+    topColor:    { value: new THREE.Color(0x3d6fa2) },
+    bottomColor: { value: new THREE.Color(0x9ab0c8) },
+    exponent:    { value: 0.45 }
+};
+const skyDome = new THREE.Mesh(
+    new THREE.SphereGeometry(900, 32, 16),
+    new THREE.ShaderMaterial({
+        uniforms: skyUniforms,
+        vertexShader:`
+            varying float vY;
+            void main(){
+                vY = normalize(position).y;
+                gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0);
+            }`,
+        fragmentShader:`
+            uniform vec3 topColor;
+            uniform vec3 bottomColor;
+            uniform float exponent;
+            varying float vY;
+            void main(){
+                float h = max(0.0, vY);
+                vec3 col = mix(bottomColor, topColor, pow(h, exponent));
+                gl_FragColor = vec4(col,1.0);
+            }`,
+        side: THREE.BackSide,
+        depthWrite: false
+    })
+);
+skyDome.renderOrder = -100;
+scene.add(skyDome);
+
+// ═══════════════════════════════════════════
+//  太阳（发光圆盘）
+// ═══════════════════════════════════════════
+const sunSphere = new THREE.Mesh(
+    new THREE.SphereGeometry(18, 20, 20),
+    new THREE.MeshBasicMaterial({color:0xffffd8})
+);
+scene.add(sunSphere);
+
+// 太阳光晕（外层大圆盘）
+const sunGlow = new THREE.Mesh(
+    new THREE.SphereGeometry(28, 20, 20),
+    new THREE.MeshBasicMaterial({color:0xffe080, transparent:true, opacity:0.22,
+        depthWrite:false, blending:THREE.AdditiveBlending})
+);
+scene.add(sunGlow);
+
+// ── 太阳光线射线 ──────────────────────────────
+const sunRays = [];
+for (let i = 0; i < 12; i++) {
+    const angle = (i/12)*Math.PI*2;
+    const ray = new THREE.Mesh(
+        new THREE.PlaneGeometry(4, 80),
+        new THREE.MeshBasicMaterial({color:0xffe8a0, transparent:true, opacity:0.08,
+            depthWrite:false, blending:THREE.AdditiveBlending, side:THREE.DoubleSide})
+    );
+    ray.userData.baseAngle = angle;
+    scene.add(ray);
+    sunRays.push(ray);
+}
+
+// ═══════════════════════════════════════════
+//  月亮
+// ═══════════════════════════════════════════
+const moonSphere = new THREE.Mesh(
+    new THREE.SphereGeometry(12, 16, 16),
+    new THREE.MeshBasicMaterial({color:0xd8d8ee})
+);
+scene.add(moonSphere);
+
+const moonGlow = new THREE.Mesh(
+    new THREE.SphereGeometry(18, 16, 16),
+    new THREE.MeshBasicMaterial({color:0x8888cc, transparent:true, opacity:0.15,
+        depthWrite:false, blending:THREE.AdditiveBlending})
+);
+scene.add(moonGlow);
+
+// ═══════════════════════════════════════════
+//  星空（Points — 夜间显示）
+// ═══════════════════════════════════════════
+const STAR_COUNT = 2400;
+const starPositions = new Float32Array(STAR_COUNT*3);
+const starColors    = new Float32Array(STAR_COUNT*3);
+for (let i = 0; i < STAR_COUNT; i++) {
+    const theta = Math.random()*Math.PI*2;
+    const phi   = Math.acos(2*Math.random()-1)*0.5; // upper hemisphere
+    const r     = 800;
+    starPositions[i*3]   = r*Math.sin(phi)*Math.cos(theta);
+    starPositions[i*3+1] = r*Math.cos(phi);
+    starPositions[i*3+2] = r*Math.sin(phi)*Math.sin(theta);
+    const warm = Math.random();
+    starColors[i*3]   = 0.8 + warm*0.2;
+    starColors[i*3+1] = 0.8 + (1-warm)*0.1;
+    starColors[i*3+2] = 0.9 + warm*0.1;
+}
+const starGeo = new THREE.BufferGeometry();
+starGeo.setAttribute('position', new THREE.BufferAttribute(starPositions,3));
+starGeo.setAttribute('color',    new THREE.BufferAttribute(starColors,3));
+const stars = new THREE.Points(starGeo, new THREE.PointsMaterial({
+    size:1.8, vertexColors:true, sizeAttenuation:true,
+    transparent:true, opacity:0, depthWrite:false
+}));
+scene.add(stars);
+
+// ═══════════════════════════════════════════
+//  云层（多层 Billboard 精灵）
+// ═══════════════════════════════════════════
+function makeCloudTexture(seed) {
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = 256;
+    const cx = cv.getContext('2d');
+    cx.clearRect(0,0,256,256);
+    const blobs = [
+        [128,128,72,0.82],[85,128,55,0.65],[165,128,60,0.68],
+        [110,105,48,0.55],[148,110,50,0.52],[128,150,52,0.5],
+        [70,145,40,0.42],[190,140,42,0.40],
+    ];
+    blobs.forEach(([bx,by,br,ba]) => {
+        const ox = (Math.sin(seed*bx*0.3)*20)|0;
+        const oy = (Math.cos(seed*by*0.2)*12)|0;
+        const rr = br + seed*15%20;
+        const g = cx.createRadialGradient(bx+ox,by+oy,0,bx+ox,by+oy,rr);
+        g.addColorStop(0,`rgba(245,248,252,${ba})`);
+        g.addColorStop(0.6,`rgba(230,238,248,${ba*0.5})`);
+        g.addColorStop(1,'rgba(220,232,248,0)');
+        cx.fillStyle=g;
+        cx.beginPath();cx.ellipse(bx+ox,by+oy,rr,rr*0.62,0,0,Math.PI*2);cx.fill();
+    });
+    return new THREE.CanvasTexture(cv);
+}
+
+const cloudSprites = [];
+const cloudTextures = [0,1,2,3].map(i=>makeCloudTexture(i+1));
+for (let i = 0; i < 26; i++) {
+    const ti = i % cloudTextures.length;
+    const mat = new THREE.SpriteMaterial({
+        map: cloudTextures[ti], transparent:true,
+        opacity: 0.85, depthWrite:false
+    });
+    const spr = new THREE.Sprite(mat);
+    const sw = 80 + Math.random()*120;
+    spr.scale.set(sw, sw*0.38, 1);
+    const angle = Math.random()*Math.PI*2;
+    const radius= 100 + Math.random()*280;
+    const height= 60 + Math.random()*120;
+    spr.position.set(Math.cos(angle)*radius, height, Math.sin(angle)*radius);
+    scene.add(spr);
+    cloudSprites.push({spr, speed:0.015+Math.random()*0.025, baseY:height, angle, radius});
+}
+
+// ═══════════════════════════════════════════
+//  地面（大草地平面）
+// ═══════════════════════════════════════════
+function makeGroundTex() {
+    const cv = document.createElement('canvas');
+    cv.width=cv.height=512;
+    const cx=cv.getContext('2d');
+    // 基础草地
+    cx.fillStyle='#2a3d1a';cx.fillRect(0,0,512,512);
+    // 随机草斑
+    for(let k=0;k<300;k++){
+        const gx=Math.random()*512,gy=Math.random()*512,gs=4+Math.random()*20;
+        const lightness=(Math.random()>0.5)?0.12:-0.08;
+        cx.fillStyle=`rgba(${lightness>0?60:20},${lightness>0?80:50},${lightness>0?25:15},0.4)`;
+        cx.beginPath();cx.ellipse(gx,gy,gs,gs*0.4,Math.random()*Math.PI,0,Math.PI*2);cx.fill();
+    }
+    // 泥土路纹
+    for(let k=0;k<40;k++){
+        cx.fillStyle=`rgba(80,55,25,${0.1+Math.random()*0.15})`;
+        cx.beginPath();cx.ellipse(Math.random()*512,Math.random()*512,3+Math.random()*8,2+Math.random()*4,Math.random()*Math.PI,0,Math.PI*2);cx.fill();
+    }
+    const t=new THREE.CanvasTexture(cv);
+    t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(40,40);
+    return t;
+}
+const groundMesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(1600,1600,1,1),
+    new THREE.MeshLambertMaterial({map:makeGroundTex()})
+);
+groundMesh.rotation.x=-Math.PI/2;
+groundMesh.receiveShadow=true;
+scene.add(groundMesh);
+
+// 地面湿反光（雨天叠加）
+const wetOverlay = new THREE.Mesh(
+    new THREE.PlaneGeometry(800,800),
+    new THREE.MeshPhongMaterial({color:0x336688, transparent:true, opacity:0,
+        shininess:400, specular:0xaaccff, depthWrite:false})
+);
+wetOverlay.rotation.x=-Math.PI/2;
+wetOverlay.position.y=0.01;
+scene.add(wetOverlay);
+
+// ═══════════════════════════════════════════
+//  简单军事建筑物（给天气效果提供参照）
+// ═══════════════════════════════════════════
+function addBuilding(x,z,w,d,h,col) {
+    const mat = new THREE.MeshPhongMaterial({color:col, shininess:20});
+    const body = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+    body.position.set(x,h/2,z);
+    body.castShadow=body.receiveShadow=true;
+    scene.add(body);
+    // 屋顶
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(w+0.3,0.5,d+0.3),
+        new THREE.MeshPhongMaterial({color:0x445533,shininess:10}));
+    roof.position.set(x,h+0.25,z);
+    scene.add(roof);
+}
+addBuilding(-35,  0, 14, 8, 8, 0x606448);
+addBuilding(  0,-30,  8,12, 6, 0x5a5040);
+addBuilding( 40, 20,  6, 6,10, 0x4a4838);
+addBuilding(-20, 35, 18, 6, 5, 0x606448);
+
+// 围墙段
+for(let k=0;k<6;k++){
+    const wm=new THREE.Mesh(new THREE.BoxGeometry(12,2.5,0.6),
+        new THREE.MeshPhongMaterial({color:0x555850,shininess:10}));
+    wm.position.set(-30+k*12,1.25,-50);
+    wm.castShadow=true;
+    scene.add(wm);
+}
+// 树木
+function addTree(x,z,h) {
+    const trunkMat=new THREE.MeshPhongMaterial({color:0x3a2510,shininess:20});
+    const leafMat =new THREE.MeshPhongMaterial({color:0x1e4a14,shininess:30});
+    const trunk=new THREE.Mesh(new THREE.CylinderGeometry(0.25,0.35,h*0.35,8),trunkMat);
+    trunk.position.set(x,h*0.175,z); trunk.castShadow=true; scene.add(trunk);
+    const layers=3+Math.floor(Math.random()*2);
+    for(let i=0;i<layers;i++){
+        const r=1.6-i*0.28, lh=1.8-i*0.2;
+        const cone=new THREE.Mesh(new THREE.ConeGeometry(r,lh,8),leafMat);
+        cone.position.set(x, h*0.35+i*lh*0.65, z);
+        cone.castShadow=true; scene.add(cone);
+    }
+}
+[[-15,15,7],[-18,-12,9],[22,-18,8],[30,8,6],[50,-10,8],[-45,20,7],
+ [10,50,9],[-50,-30,6],[38,40,7],[-8,30,8]].forEach(([x,z,h])=>addTree(x,z,h));
+
+// ═══════════════════════════════════════════
+//  雨粒子
+// ═══════════════════════════════════════════
+const RAIN_MAX = 6000;
+const rainPositions = new Float32Array(RAIN_MAX*3);
+const rainVels      = new Float32Array(RAIN_MAX*3);
+for(let i=0;i<RAIN_MAX;i++){
+    rainPositions[i*3]  =camera.position.x+(Math.random()-0.5)*160;
+    rainPositions[i*3+1]=Math.random()*120;
+    rainPositions[i*3+2]=camera.position.z+(Math.random()-0.5)*160;
+    rainVels[i*3]  =-0.5-Math.random()*0.8;
+    rainVels[i*3+1]=-22-Math.random()*12;
+    rainVels[i*3+2]=-1.0-Math.random()*0.6;
+}
+const rainGeo=new THREE.BufferGeometry();
+rainGeo.setAttribute('position',new THREE.BufferAttribute(rainPositions,3));
+const rainMat=new THREE.PointsMaterial({
+    color:0x8ab4d8,size:0.22,sizeAttenuation:true,
+    transparent:true,opacity:0,depthWrite:false
+});
+const rainPts=new THREE.Points(rainGeo,rainMat);
+scene.add(rainPts);
+
+// ═══════════════════════════════════════════
+//  雪粒子
+// ═══════════════════════════════════════════
+const SNOW_MAX=5000;
+const snowPositions=new Float32Array(SNOW_MAX*3);
+for(let i=0;i<SNOW_MAX;i++){
+    snowPositions[i*3]  =(Math.random()-0.5)*180;
+    snowPositions[i*3+1]=Math.random()*120;
+    snowPositions[i*3+2]=(Math.random()-0.5)*180;
+}
+const snowGeo=new THREE.BufferGeometry();
+snowGeo.setAttribute('position',new THREE.BufferAttribute(snowPositions,3));
+const snowMat=new THREE.PointsMaterial({
+    color:0xeef2ff,size:0.45,sizeAttenuation:true,
+    transparent:true,opacity:0,depthWrite:false
+});
+const snowPts=new THREE.Points(snowGeo,snowMat);
+scene.add(snowPts);
+
+// ═══════════════════════════════════════════
+//  沙尘粒子
+// ═══════════════════════════════════════════
+const DUST_MAX=3000;
+const dustPositions=new Float32Array(DUST_MAX*3);
+for(let i=0;i<DUST_MAX;i++){
+    dustPositions[i*3]  =(Math.random()-0.5)*200;
+    dustPositions[i*3+1]=Math.random()*40;
+    dustPositions[i*3+2]=(Math.random()-0.5)*200;
+}
+const dustGeo=new THREE.BufferGeometry();
+dustGeo.setAttribute('position',new THREE.BufferAttribute(dustPositions,3));
+const dustMat=new THREE.PointsMaterial({
+    color:0xc8a060,size:0.55,sizeAttenuation:true,
+    transparent:true,opacity:0,depthWrite:false
+});
+const dustPts=new THREE.Points(dustGeo,dustMat);
+scene.add(dustPts);
+
+// ═══════════════════════════════════════════
+//  闪电（雷暴天气）
+// ═══════════════════════════════════════════
+let lightningMeshes=[];
+function createLightning(){
+    lightningMeshes.forEach(m=>scene.remove(m));
+    lightningMeshes=[];
+    const x0=(Math.random()-0.5)*150;
+    const z0=(Math.random()-0.5)*150;
+    let py=180;
+    const segments=8+Math.floor(Math.random()*6);
+    for(let i=0;i<segments;i++){
+        const dx=(Math.random()-0.5)*16, dz=(Math.random()-0.5)*16;
+        const sy=py, ey=py-(180/segments)+(Math.random()-0.5)*20;
+        const lGeo=new THREE.CylinderGeometry(0.15,0.4,Math.abs(sy-ey),4);
+        const lMat=new THREE.MeshBasicMaterial({
+            color:0xccddff,transparent:true,opacity:0.95,
+            depthWrite:false,blending:THREE.AdditiveBlending
+        });
+        const lm=new THREE.Mesh(lGeo,lMat);
+        lm.position.set(x0+dx,(sy+ey)/2,z0+dz);
+        lm.rotation.z=Math.atan2(dx,sy-ey)*0.5;
+        scene.add(lm);
+        lightningMeshes.push(lm);
+        // 外层辉光
+        const gGeo=new THREE.CylinderGeometry(1.5,2.5,Math.abs(sy-ey),4);
+        const gMat=new THREE.MeshBasicMaterial({
+            color:0x6699ff,transparent:true,opacity:0.18,
+            depthWrite:false,blending:THREE.AdditiveBlending
+        });
+        const gm=new THREE.Mesh(gGeo,gMat);
+        gm.position.copy(lm.position);
+        gm.rotation.copy(lm.rotation);
+        scene.add(gm);
+        lightningMeshes.push(gm);
+        py=ey;
+    }
+    // 落点闪光
+    const flash=new THREE.PointLight(0x88aaff,12,80);
+    flash.position.set(x0,1,z0);
+    scene.add(flash);
+    lightningMeshes.push(flash);
+
+    // 闪屏效果
+    const flashDiv=document.createElement('div');
+    flashDiv.style.cssText='position:fixed;inset:0;background:rgba(160,180,255,.28);z-index:50;pointer-events:none;';
+    document.body.appendChild(flashDiv);
+    setTimeout(()=>flashDiv.remove(),80);
+
+    // 自动消除
+    setTimeout(()=>{
+        lightningMeshes.forEach(m=>scene.remove(m));
+        lightningMeshes=[];
+    }, 120+Math.random()*160);
+}
+
+// ═══════════════════════════════════════════
+//  雨滴地面水花（用点模拟）
+// ═══════════════════════════════════════════
+const splashPool=[];
+function createSplash(x,z){
+    if(splashPool.length>80)return;
+    const g=new THREE.Mesh(
+        new THREE.TorusGeometry(0.15,0.04,4,8),
+        new THREE.MeshBasicMaterial({color:0x88aacc,transparent:true,opacity:0.8,
+            depthWrite:false,blending:THREE.AdditiveBlending,side:THREE.DoubleSide})
+    );
+    g.rotation.x=-Math.PI/2;
+    g.position.set(x,0.02,z);
+    scene.add(g);
+    splashPool.push({mesh:g, life:0.35, maxLife:0.35});
+}
+
+// ═══════════════════════════════════════════
+//  晨雾（低层体积薄雾 — Clear天气清晨）
+// ═══════════════════════════════════════════
+const mornFogMesh=new THREE.Mesh(
+    new THREE.PlaneGeometry(600,600),
+    new THREE.MeshBasicMaterial({color:0xb8ccdd,transparent:true,opacity:0,
+        depthWrite:false,side:THREE.DoubleSide})
+);
+mornFogMesh.rotation.x=-Math.PI/2;
+mornFogMesh.position.y=2.5;
+scene.add(mornFogMesh);
+
+// ═══════════════════════════════════════════
+//  工具函数
+// ═══════════════════════════════════════════
+function getSkyColors(t, wx) {
+    // 太阳仰角
+    const sunAngle = Math.sin((t-0.25)*Math.PI*2);
+    const dayFactor= Math.max(0, sunAngle);
+
+    let tR,tG,tB,bR,bG,bB;
+    const isSunrise = sunAngle>-0.15&&sunAngle<0.22;
+    const isSunset  = sunAngle>-0.15&&sunAngle<0.22 && t>0.5;
+
+    if(wx==='fog'){
+        return{topR:0.55,topG:0.58,topB:0.60, botR:0.72,botG:0.73,botB:0.74};
+    }
+    if(wx==='dust'){
+        return{topR:0.60,topG:0.45,topB:0.22, botR:0.75,botG:0.60,botB:0.30};
+    }
+    if(wx==='storm'){
+        return{topR:0.12+dayFactor*0.10,topG:0.13+dayFactor*0.12,topB:0.18+dayFactor*0.12,
+               botR:0.25+dayFactor*0.15,botG:0.26+dayFactor*0.14,botB:0.28+dayFactor*0.12};
+    }
+
+    // 日出/日落
+    if(isSunrise||isSunset){
+        const sr=Math.max(0,0.22-Math.abs(sunAngle))/0.22;
+        tR = 0.10+dayFactor*0.25+sr*0.18;
+        tG = 0.05+dayFactor*0.38-sr*0.05;
+        tB = 0.22+dayFactor*0.42-sr*0.20;
+        bR = 0.55+sr*0.35;
+        bG = 0.40+sr*0.18;
+        bB = 0.22-sr*0.12;
+    } else if(dayFactor>0){
+        // 白天
+        tR=0.22+dayFactor*0.18; tG=0.38+dayFactor*0.28; tB=0.58+dayFactor*0.28;
+        bR=0.55+dayFactor*0.35; bG=0.65+dayFactor*0.25; bB=0.72+dayFactor*0.18;
+    } else {
+        // 夜晚
+        tR=0.02; tG=0.04; tB=0.12;
+        bR=0.05; bG=0.06; bB=0.18;
+    }
+
+    if(wx==='rain'||wx==='snow'){
+        tR*=0.55; tG*=0.58; tB*=0.65;
+        bR*=0.60; bG*=0.62; bB*=0.68;
+    }
+    return{topR:tR,topG:tG,topB:tB,botR:bR,botG:bG,botB:bB};
+}
+
+function timeToHHMM(t){
+    const h=Math.floor(t*24)%24;
+    const m=Math.floor((t*24-h)*60);
+    return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+}
+function getTimeSlot(t){
+    const h=t*24;
+    if(h>=5&&h<7)return'黎明';
+    if(h>=7&&h<11)return'上午';
+    if(h>=11&&h<14)return'正午';
+    if(h>=14&&h<17)return'下午';
+    if(h>=17&&h<20)return'黄昏';
+    if(h>=20&&h<22)return'傍晚';
+    return'深夜';
+}
+function getTimeIcon(t){
+    const h=t*24;
+    if(h>=5&&h<7)return'🌅';
+    if(h>=7&&h<18)return'☀️';
+    if(h>=18&&h<20)return'🌇';
+    if(h>=20&&h<22)return'🌃';
+    return'🌙';
+}
+function getWxLabel(wx){
+    return{clear:'☀️ 晴天',rain:'🌧 暴雨',snow:'❄️ 大雪',
+           fog:'🌫 浓雾',storm:'⛈ 雷暴',dust:'🌪 沙尘'}[wx]||wx;
+}
+
+// ═══════════════════════════════════════════
+//  主更新循环
+// ═══════════════════════════════════════════
+let lastTime=0, frameCount=0;
+let fpsTimer=0, fpsCount=0;
+let wetness=0;
+let wxTransTimer=0, wxFrom='clear', wxTo='clear';
+let rainIntensity=0, snowIntensity=0, fogIntensity=0, dustIntensity=0;
+
+function animate(now=0){
+    requestAnimationFrame(animate);
+    const dt=Math.min((now-lastTime)/1000, 0.05);
+    lastTime=now;
+    frameCount++;
+
+    // FPS
+    fpsTimer+=dt; fpsCount++;
+    if(fpsTimer>=1.0){
+        document.getElementById('i-fps').textContent=fpsCount+'fps';
+        fpsTimer=0; fpsCount=0;
+    }
+
+    // 时间推进
+    if(autoTime) gameTime=(gameTime+dt*0.004)%1.0;
+
+    // 粒子密度 / 风速目标透明度
+    const windFactor = windSpeed/100;
+    const targetRain  = wxType==='rain'   ? particleDensity*0.95 : wxType==='storm' ? particleDensity*1.0 : 0;
+    const targetSnow  = wxType==='snow'   ? particleDensity*0.85 : 0;
+    const targetFog   = wxType==='fog'    ? (1-fogVis+0.05)      : wxType==='storm' ? 0.35 : 0;
+    const targetDust  = wxType==='dust'   ? particleDensity*0.80 : 0;
+
+    const lerpSpd = 0.8*dt;
+    rainIntensity += (targetRain-rainIntensity)*lerpSpd;
+    snowIntensity += (targetSnow-snowIntensity)*lerpSpd;
+    fogIntensity  += (targetFog -fogIntensity )*lerpSpd;
+    dustIntensity += (targetDust-dustIntensity)*lerpSpd;
+
+    // ── 天空颜色更新 ──────────────────────────
+    const sc=getSkyColors(gameTime, wxType);
+    skyUniforms.topColor.value.setRGB(
+        Math.max(0,Math.min(1,sc.topR)),
+        Math.max(0,Math.min(1,sc.topG)),
+        Math.max(0,Math.min(1,sc.topB))
+    );
+    skyUniforms.bottomColor.value.setRGB(
+        Math.max(0,Math.min(1,sc.botR)),
+        Math.max(0,Math.min(1,sc.botG)),
+        Math.max(0,Math.min(1,sc.botB))
+    );
+    // scene background match horizon
+    renderer.setClearColor(new THREE.Color(sc.botR,sc.botG,sc.botB));
+
+    // ── 雾效 ──────────────────────────────────
+    if(wxType==='fog'){
+        const fd=Math.max(0.005,0.12*(1-fogVis));
+        scene.fog=new THREE.FogExp2(new THREE.Color(0.65,0.68,0.70).getHex(), fd);
+    } else if(wxType==='dust'){
+        scene.fog=new THREE.Fog(0xc0904a, 20, 120-fogVis*60);
+    } else if(wxType==='storm'){
+        scene.fog=new THREE.Fog(0x333344, 80, 300);
+    } else if(wxType==='rain'){
+        scene.fog=new THREE.Fog(0x778899, 120, 400);
+    } else {
+        scene.fog=null;
+    }
+
+    // ── 太阳/月亮位置 ────────────────────────
+    const sunAngle =(gameTime-0.25)*Math.PI*2;
+    const moonAngle=(gameTime-0.75)*Math.PI*2;
+    const sunR=400;
+    sunSphere.position.set(
+        Math.cos(sunAngle)*sunR*0.5,
+        Math.sin(sunAngle)*sunR,
+        -Math.cos(sunAngle)*sunR*0.5
+    );
+    sunGlow.position.copy(sunSphere.position);
+    moonSphere.position.set(
+        Math.cos(moonAngle)*sunR*0.4,
+        Math.sin(moonAngle)*sunR,
+        -Math.cos(moonAngle)*sunR*0.4
+    );
+    moonGlow.position.copy(moonSphere.position);
+
+    // 白天太阳可见，夜晚月亮可见
+    const dayF=Math.max(0,Math.sin(sunAngle));
+    const nightF=Math.max(0,Math.sin(moonAngle));
+    sunSphere.visible = sunGlow.visible = dayF>0.02 && wxType!=='fog' && wxType!=='dust';
+    moonSphere.visible= moonGlow.visible= nightF>0.02 && wxType!=='fog';
+
+    // 太阳光线
+    sunRays.forEach((ray,ri) => {
+        ray.visible = dayF>0.05 && wxType==='clear';
+        if(!ray.visible)return;
+        const ang = ray.userData.baseAngle + frameCount*0.004;
+        ray.position.copy(sunSphere.position);
+        ray.position.x+=Math.cos(ang)*30;
+        ray.position.y+=Math.sin(ang)*30;
+        ray.lookAt(camera.position);
+        ray.material.opacity = 0.04+dayF*0.07;
+    });
+
+    // ── 灯光更新 ─────────────────────────────
+    const lightMult = wxType==='storm'?0.4 : wxType==='fog'?0.35 : wxType==='dust'?0.5 :
+                      wxType==='rain'?0.55 : 1.0;
+    sunLight.intensity  = dayF*1.4*lightMult;
+    moonLight.intensity = nightF*0.35;
+    ambLight.intensity  = 0.25+0.5*dayF*lightMult;
+    hemiLight.intensity = 0.5+0.7*dayF*lightMult;
+
+    sunLight.position.set(
+        Math.cos(sunAngle)*100,
+        Math.sin(sunAngle)*120,
+        -Math.cos(sunAngle)*80
+    );
+
+    // ── 星星透明度 ───────────────────────────
+    stars.material.opacity = Math.max(0, nightF*1.2-0.1) * (wxType==='clear'?1.0:0.2);
+
+    // ── 云层动画 ─────────────────────────────
+    const wfx = (windSpeed/100)*0.01;
+    cloudSprites.forEach((c,ci) => {
+        c.angle += c.speed*dt*(0.3+windSpeed*0.006);
+        c.spr.position.x = Math.cos(c.angle)*c.radius;
+        c.spr.position.z = Math.sin(c.angle)*c.radius;
+        c.spr.position.y = c.baseY+Math.sin(now*0.0003+ci)*3.5;
+
+        // 天气下云朵变暗变低
+        let cloudOp=0.82;
+        if(wxType==='rain'||wxType==='storm') { cloudOp=0.92; c.spr.material.color.set(0x8899aa); c.spr.position.y=Math.min(c.spr.position.y, 80); }
+        else if(wxType==='snow') { cloudOp=0.88; c.spr.material.color.set(0xdde8f0); }
+        else if(wxType==='fog')  { cloudOp=0.15; c.spr.material.color.set(0xaabbcc); }
+        else if(wxType==='dust') { cloudOp=0.40; c.spr.material.color.set(0xc0904a); }
+        else { c.spr.material.color.set(0xffffff); }
+        c.spr.material.opacity=cloudOp;
+    });
+
+    // ── 雨粒子更新 ───────────────────────────
+    rainMat.opacity = rainIntensity;
+    rainPts.visible = rainIntensity>0.01;
+    if(rainPts.visible && frameCount%2===0){
+        const pa=rainGeo.attributes.position.array;
+        const wx_drift = windSpeed*0.004;
+        for(let i=0;i<RAIN_MAX;i++){
+            pa[i*3]  += rainVels[i*3  ]*dt*3*(1+windFactor)*2;
+            pa[i*3+1]+= rainVels[i*3+1]*dt*(0.5+rainIntensity);
+            pa[i*3+2]+= rainVels[i*3+2]*dt*3;
+            // 风力偏移
+            pa[i*3]  += wx_drift*dt*20;
+            // 重置越界粒子
+            if(pa[i*3+1]<0){
+                pa[i*3]  =camera.position.x+(Math.random()-0.5)*160;
+                pa[i*3+1]=80+Math.random()*40;
+                pa[i*3+2]=camera.position.z+(Math.random()-0.5)*160;
+                // 随机水花
+                if(Math.random()<0.003) createSplash(pa[i*3],pa[i*3+2]);
+            }
+        }
+        rainGeo.attributes.position.needsUpdate=true;
+    }
+
+    // ── 雪粒子更新 ───────────────────────────
+    snowMat.opacity = snowIntensity;
+    snowPts.visible = snowIntensity>0.01;
+    if(snowPts.visible && frameCount%3===0){
+        const pa=snowGeo.attributes.position.array;
+        for(let i=0;i<SNOW_MAX;i++){
+            pa[i*3]  += Math.sin(now*0.001+i*0.3)*0.04 + (windSpeed*0.0003);
+            pa[i*3+1]+= -3*dt*(0.4+snowIntensity*0.6);
+            pa[i*3+2]+= Math.cos(now*0.001+i*0.2)*0.03;
+            if(pa[i*3+1]<0){
+                pa[i*3]  =(Math.random()-0.5)*180;
+                pa[i*3+1]=80+Math.random()*50;
+                pa[i*3+2]=(Math.random()-0.5)*180;
+            }
+        }
+        snowGeo.attributes.position.needsUpdate=true;
+    }
+
+    // ── 沙尘粒子更新 ─────────────────────────
+    dustMat.opacity = dustIntensity*0.7;
+    dustPts.visible = dustIntensity>0.01;
+    if(dustPts.visible && frameCount%2===0){
+        const pa=dustGeo.attributes.position.array;
+        const ws=windSpeed*0.012;
+        for(let i=0;i<DUST_MAX;i++){
+            pa[i*3]  += ws*dt*35 + Math.sin(now*0.002+i)*0.08;
+            pa[i*3+1]+= Math.sin(now*0.003+i*0.7)*0.06;
+            pa[i*3+2]+= -ws*dt*8;
+            if(pa[i*3]>100) pa[i*3]=-100;
+            if(pa[i*3+1]>40) pa[i*3+1]=0;
+            if(pa[i*3+1]<0)  pa[i*3+1]=0.5;
+        }
+        dustGeo.attributes.position.needsUpdate=true;
+    }
+
+    // ── 地面湿反光 ───────────────────────────
+    wetness += ((wxType==='rain'||wxType==='storm'?1:0)-wetness)*0.3*dt;
+    wetOverlay.material.opacity = wetness*0.25;
+
+    // ── 晨雾 ─────────────────────────────────
+    const h24=gameTime*24;
+    const mornFog = wxType==='clear' ? Math.max(0, Math.min(1, 1-(Math.abs(h24-6)/2))) : 0;
+    mornFogMesh.material.opacity = mornFog*0.18;
+
+    // ── 水花动画 ─────────────────────────────
+    for(let i=splashPool.length-1;i>=0;i--){
+        const sp=splashPool[i];
+        sp.life-=dt;
+        if(sp.life<=0){ scene.remove(sp.mesh); splashPool.splice(i,1); continue; }
+        const t2=1-sp.life/sp.maxLife;
+        sp.mesh.scale.setScalar(1+t2*3);
+        sp.mesh.material.opacity=0.8*(1-t2);
+    }
+
+    // ── 雷暴闪电 ─────────────────────────────
+    if(wxType==='storm'){
+        lightningTimer-=dt;
+        if(lightningTimer<=0){
+            createLightning();
+            lightningTimer=1.5+Math.random()*5;
+        }
+    }
+
+    // ── 自动天气循环 ─────────────────────────
+    if(autoCycle){
+        autoTimer-=dt;
+        if(autoTimer<=0){
+            const all=['clear','rain','snow','fog','storm','dust'];
+            const next=all[(all.indexOf(wxType)+1)%all.length];
+            setWeather(next);
+            autoTimer=25+Math.random()*20;
+        }
+    }
+
+    // ── 更新信息面板 ──────────────────────────
+    if(frameCount%20===0){
+        const temps={clear:18+dayF*12,rain:12+dayF*4,snow:-4-Math.random()*2,fog:10+dayF*5,storm:8+dayF*3,dust:28+dayF*8};
+        const humid={clear:40+dayF*10,rain:88+Math.random()*8,snow:70+Math.random()*15,fog:92+Math.random()*6,storm:90+Math.random()*8,dust:15+Math.random()*10};
+        windDirIdx=(windDirIdx+Math.floor(Math.random()*2)-0+16)%16;
+        const cloud={clear:dayF>0.3?'少云':'晴空',rain:'密云',snow:'阴云',fog:'云雾',storm:'雷云',dust:'尘云'};
+        const lux  ={clear:dayF>0.5?'强':'弱',rain:'暗',snow:'柔光',fog:'极弱',storm:'闪光',dust:'昏黄'};
+        const vis  ={clear:'10km+',rain:`${Math.floor(1.5+fogVis*3)}km`,snow:`${Math.floor(1+fogVis*2)}km`,fog:`${Math.floor(fogVis*0.8*100)}m`,storm:`${Math.floor(1+fogVis*2)}km`,dust:`${Math.floor(0.5+fogVis*1.5)}km`};
+        document.getElementById('i-wx').textContent   = {clear:'晴天',rain:'暴雨',snow:'大雪',fog:'浓雾',storm:'雷暴',dust:'沙尘'}[wxType];
+        document.getElementById('i-slot').textContent = getTimeSlot(gameTime);
+        document.getElementById('i-temp').textContent = Math.round(temps[wxType]||18)+'°C';
+        document.getElementById('i-humid').textContent= Math.round(humid[wxType]||50)+'%';
+        document.getElementById('i-wdir').textContent = DIRS[windDirIdx];
+        document.getElementById('i-cloud').textContent= cloud[wxType];
+        document.getElementById('i-lux').textContent  = lux[wxType];
+        document.getElementById('i-vis').textContent  = vis[wxType];
+    }
+
+    // 时间显示
+    document.getElementById('time-display').textContent = timeToHHMM(gameTime);
+    document.getElementById('time-icon').textContent    = getTimeIcon(gameTime);
+    if(!isDragging){
+        document.getElementById('time-slider').value = Math.floor(gameTime*1000);
+    }
+
+    renderer.render(scene, camera);
+}
+
+// ═══════════════════════════════════════════
+//  天气切换
+// ═══════════════════════════════════════════
+function setWeather(wx){
+    wxType=wx;
+    // 更新按钮状态
+    document.querySelectorAll('.wx-btn').forEach(b=>{
+        b.classList.toggle('active', b.dataset.wx===wx);
+    });
+    document.getElementById('weather-name-badge').textContent=getWxLabel(wx);
+    // 雷暴重置计时器
+    if(wx==='storm') lightningTimer=0.5;
+    // 切换到清晰天气时禁用雾
+    if(wx==='clear') scene.fog=null;
+}
+
+// ═══════════════════════════════════════════
+//  UI 绑定
+// ═══════════════════════════════════════════
+document.querySelectorAll('.wx-btn').forEach(b=>{
+    b.addEventListener('click',()=>setWeather(b.dataset.wx));
+});
+
+document.getElementById('wind-slider').addEventListener('input',function(){
+    windSpeed=+this.value;
+    document.getElementById('wind-val').textContent=windSpeed+' km/h';
+});
+document.getElementById('density-slider').addEventListener('input',function(){
+    particleDensity=+this.value/100;
+    document.getElementById('density-val').textContent=this.value+'%';
+});
+document.getElementById('fog-slider').addEventListener('input',function(){
+    fogVis=+this.value/100;
+    document.getElementById('fog-val').textContent=this.value+'%';
+});
+document.getElementById('auto-cycle').addEventListener('change',function(){
+    autoCycle=this.checked;
+    if(autoCycle) autoTimer=5;
+});
+document.getElementById('auto-time').addEventListener('change',function(){
+    autoTime=this.checked;
+});
+document.getElementById('time-slider').addEventListener('input',function(){
+    gameTime=+this.value/1000;
+    autoTime=false;
+    document.getElementById('auto-time').checked=false;
+});
+
+// 键盘快捷键
+document.addEventListener('keydown',e=>{
+    const map={1:'clear',2:'rain',3:'snow',4:'fog',5:'storm',6:'dust'};
+    if(map[e.key]) setWeather(map[e.key]);
+    if(e.key==='t'||e.key==='T'){autoTime=!autoTime;document.getElementById('auto-time').checked=autoTime;}
+    if(e.key==='c'||e.key==='C'){autoCycle=!autoCycle;document.getElementById('auto-cycle').checked=autoCycle;if(autoCycle)autoTimer=3;}
+});
+
+// ═══════════════════════════════════════════
+//  启动
+// ═══════════════════════════════════════════
+setWeather('clear');
+animate();
+</script>
+</body>
+</html>
