@@ -299,23 +299,107 @@ input{outline:none;border:none;}
 .shop-item.owned .shop-buy-btn{background:#1a3a1a;color:var(--green);}
 
 /* ── 小游戏面板 ── */
-#panel-minigames{padding:20px;overflow-y:auto;}
-.minigames-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px;margin-top:16px;}
+#panel-minigames{overflow:hidden;display:flex;flex-direction:column;}
+.mg-lobby{padding:20px 24px;display:flex;flex-direction:column;flex:1;overflow-y:auto;}
+.mg-lobby-title{font-size:1.1rem;font-weight:700;margin-bottom:4px;}
+.mg-lobby-sub{font-size:0.76rem;color:var(--text-dim);margin-bottom:20px;}
+.minigames-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px;}
 .mg-card{
   background:var(--bg-card);border:1px solid var(--border);
-  border-radius:12px;padding:24px;text-align:center;cursor:pointer;
-  transition:all 0.2s;
+  border-radius:14px;padding:0;overflow:hidden;cursor:pointer;
+  transition:all 0.2s;display:flex;flex-direction:column;
 }
-.mg-card:hover{border-color:var(--accent);transform:translateY(-3px);}
-.mg-icon{font-size:2.8rem;margin-bottom:10px;}
-.mg-name{font-size:1rem;font-weight:600;}
-.mg-desc{font-size:0.75rem;color:var(--text-dim);margin-top:5px;}
-.mg-reward{font-size:0.72rem;color:var(--gold);margin-top:8px;}
+.mg-card:hover{border-color:var(--accent);transform:translateY(-3px);box-shadow:0 8px 24px rgba(0,200,255,0.12);}
+.mg-banner{height:80px;display:flex;align-items:center;justify-content:center;font-size:3rem;position:relative;}
+.mg-body{padding:14px 16px 16px;}
+.mg-name{font-size:0.95rem;font-weight:700;margin-bottom:4px;}
+.mg-desc{font-size:0.74rem;color:var(--text-dim);line-height:1.5;margin-bottom:10px;}
+.mg-footer{display:flex;align-items:center;justify-content:space-between;}
+.mg-reward{font-size:0.7rem;color:var(--gold);}
 .mg-play-btn{
-  margin-top:12px;padding:8px 18px;
-  background:linear-gradient(135deg,#003550,#006090);
-  color:#fff;border-radius:6px;font-size:0.82rem;font-weight:600;
+  padding:7px 16px;
+  background:linear-gradient(135deg,#005580,#0099cc);
+  color:#fff;border:none;border-radius:6px;font-size:0.8rem;font-weight:600;
+  cursor:pointer;transition:all 0.15s;
 }
+.mg-play-btn:hover{filter:brightness(1.15);}
+/* 游戏容器（全面板覆盖）*/
+.mg-game-wrap{
+  position:absolute;inset:0;background:var(--bg-dark);
+  display:flex;flex-direction:column;z-index:10;
+  animation:mgSlideIn 0.2s ease;
+}
+@keyframes mgSlideIn{from{transform:translateY(20px);opacity:0}to{transform:none;opacity:1}}
+.mg-game-header{
+  display:flex;align-items:center;gap:12px;padding:12px 16px;
+  border-bottom:1px solid var(--border);flex-shrink:0;
+}
+.mg-game-title{font-weight:700;font-size:1rem;flex:1;}
+.mg-game-close{
+  padding:6px 14px;background:var(--bg-panel);border:1px solid var(--border);
+  border-radius:6px;color:var(--text-dim);cursor:pointer;font-size:0.8rem;
+}
+.mg-game-body{flex:1;overflow:hidden;position:relative;display:flex;flex-direction:column;}
+/* 靶场 canvas */
+#aim-canvas{
+  cursor:crosshair;display:block;width:100%;height:100%;
+  image-rendering:pixelated;
+}
+.mg-hud{
+  display:flex;gap:20px;padding:10px 16px;background:#0a1218;
+  border-bottom:1px solid var(--border);font-size:0.82rem;flex-shrink:0;
+}
+.mg-hud-item{display:flex;flex-direction:column;align-items:center;gap:2px;}
+.mg-hud-val{font-size:1.1rem;font-weight:700;color:var(--accent);}
+.mg-hud-lbl{font-size:0.66rem;color:var(--text-dim);}
+.mg-result{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  flex:1;gap:16px;padding:24px;
+}
+.mg-grade{font-size:5rem;line-height:1;}
+.mg-result-title{font-size:1.3rem;font-weight:700;}
+.mg-result-sub{font-size:0.82rem;color:var(--text-dim);}
+.mg-result-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;width:100%;max-width:360px;}
+.mg-result-stat{background:var(--bg-panel);border-radius:8px;padding:12px;text-align:center;}
+.mg-result-stat-val{font-size:1.3rem;font-weight:700;color:var(--accent);}
+.mg-result-stat-lbl{font-size:0.7rem;color:var(--text-dim);margin-top:2px;}
+/* 问答 */
+.quiz-wrap{padding:24px;max-width:520px;margin:0 auto;width:100%;}
+.quiz-progress{height:4px;background:var(--border);border-radius:2px;margin-bottom:20px;overflow:hidden;}
+.quiz-progress-fill{height:100%;background:var(--accent);transition:width 0.4s;}
+.quiz-q{font-size:1rem;font-weight:600;margin-bottom:16px;line-height:1.5;}
+.quiz-opt{
+  display:block;width:100%;padding:11px 16px;margin-bottom:8px;
+  background:var(--bg-panel);border:1px solid var(--border);
+  border-radius:8px;color:var(--text);font-size:0.88rem;cursor:pointer;
+  text-align:left;transition:all 0.15s;
+}
+.quiz-opt:hover:not(:disabled){border-color:var(--accent);background:rgba(0,200,255,0.08);}
+.quiz-opt.correct{border-color:var(--green);background:rgba(46,204,113,0.15);color:var(--green);}
+.quiz-opt.wrong{border-color:var(--red);background:rgba(231,76,60,0.15);color:var(--red);}
+/* 反应测试 */
+.reaction-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;gap:20px;padding:24px;}
+.reaction-zone{
+  width:160px;height:160px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:1.3rem;font-weight:700;cursor:pointer;transition:all 0.15s;user-select:none;
+  border:4px solid var(--border);
+}
+.reaction-zone.waiting{background:rgba(100,100,120,0.2);color:var(--text-dim);}
+.reaction-zone.ready{background:rgba(46,204,113,0.25);border-color:var(--green);color:var(--green);animation:pulse 0.5s infinite alternate;}
+.reaction-zone.early{background:rgba(231,76,60,0.25);border-color:var(--red);color:var(--red);}
+@keyframes pulse{from{transform:scale(0.97)}to{transform:scale(1.03)}}
+/* 记忆翻牌 */
+.memory-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:16px;max-width:400px;margin:0 auto;width:100%;}
+.mem-card{
+  aspect-ratio:1;border-radius:8px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  font-size:1.8rem;transition:all 0.25s;transform-style:preserve-3d;
+  border:2px solid var(--border);
+}
+.mem-card.face-down{background:linear-gradient(135deg,#0d2035,#152840);font-size:0;}
+.mem-card.face-down::after{content:'?';font-size:1.4rem;color:var(--text-dim);}
+.mem-card.flipped,.mem-card.matched{background:var(--bg-card);}
+.mem-card.matched{border-color:var(--green);background:rgba(46,204,113,0.12);}
 
 /* ── 大厅聊天侧边栏 ── */
 .lobby-chat{
@@ -930,41 +1014,70 @@ input{outline:none;border:none;}
       </div>
 
       <!-- 小游戏 -->
-      <div id="panel-minigames" class="lobby-panel">
-        <h2 style="padding:20px 20px 8px;font-size:1.2rem;">🎮 等待小游戏</h2>
-        <p style="padding:0 20px;font-size:0.78rem;color:var(--text-dim);">在等待匹配期间玩小游戏可获得额外积分</p>
-        <div class="minigames-grid" style="padding:20px;">
-          <div class="mg-card" onclick="playMiniGame('reaction')">
-            <div class="mg-icon">⚡</div>
-            <div class="mg-name">反应测试</div>
-            <div class="mg-desc">点击目标提高反应速度</div>
-            <div class="mg-reward">奖励：最高 +50 分</div>
-            <button class="mg-play-btn">开始游戏</button>
-          </div>
-          <div class="mg-card" onclick="playMiniGame('quiz')">
-            <div class="mg-icon">🧠</div>
-            <div class="mg-name">军事问答</div>
-            <div class="mg-desc">回答武器与战术知识题</div>
-            <div class="mg-reward">奖励：每题 +5 分</div>
-            <button class="mg-play-btn">开始游戏</button>
-          </div>
-          <div class="mg-card" onclick="playMiniGame('aim')">
-            <div class="mg-icon">🎯</div>
-            <div class="mg-name">靶场训练</div>
-            <div class="mg-desc">射击移动目标训练准心</div>
-            <div class="mg-reward">奖励：最高 +80 分</div>
-            <button class="mg-play-btn">开始游戏</button>
-          </div>
-          <div class="mg-card" onclick="playMiniGame('memory')">
-            <div class="mg-icon">🃏</div>
-            <div class="mg-name">记忆翻牌</div>
-            <div class="mg-desc">武器图标配对记忆游戏</div>
-            <div class="mg-reward">奖励：完成 +30 分</div>
-            <button class="mg-play-btn">开始游戏</button>
+      <div id="panel-minigames" class="lobby-panel" style="position:relative;">
+        <div class="mg-lobby" id="mg-lobby">
+          <div class="mg-lobby-title">🎮 小游戏中心</div>
+          <div class="mg-lobby-sub">积分奖励立即到账 · 随时开始随时退出</div>
+          <div class="minigames-grid">
+
+            <div class="mg-card" onclick="playMiniGame('aim')">
+              <div class="mg-banner" style="background:linear-gradient(135deg,#1a0a2e,#3a1060);">🎯</div>
+              <div class="mg-body">
+                <div class="mg-name">靶场训练</div>
+                <div class="mg-desc">60秒内射击移动靶标，越小的靶得分越高，挑战你的准头极限</div>
+                <div class="mg-footer">
+                  <span class="mg-reward">⭐ 最高 +80 分</span>
+                  <button class="mg-play-btn" onclick="event.stopPropagation();playMiniGame('aim')">开始</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="mg-card" onclick="playMiniGame('reaction')">
+              <div class="mg-banner" style="background:linear-gradient(135deg,#0a2a1a,#106040);">⚡</div>
+              <div class="mg-body">
+                <div class="mg-name">反应测试</div>
+                <div class="mg-desc">绿灯亮起立即点击！测量并训练你的神经反应速度，10轮计分</div>
+                <div class="mg-footer">
+                  <span class="mg-reward">⭐ 最高 +50 分</span>
+                  <button class="mg-play-btn" onclick="event.stopPropagation();playMiniGame('reaction')">开始</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="mg-card" onclick="playMiniGame('quiz')">
+              <div class="mg-banner" style="background:linear-gradient(135deg,#1a1a0a,#404010);">🧠</div>
+              <div class="mg-body">
+                <div class="mg-name">军事问答</div>
+                <div class="mg-desc">枪械知识、战术理论、武器历史，答对一题 +5 分，共12题</div>
+                <div class="mg-footer">
+                  <span class="mg-reward">⭐ 最高 +60 分</span>
+                  <button class="mg-play-btn" onclick="event.stopPropagation();playMiniGame('quiz')">开始</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="mg-card" onclick="playMiniGame('memory')">
+              <div class="mg-banner" style="background:linear-gradient(135deg,#1a0a0a,#601010);">🃏</div>
+              <div class="mg-body">
+                <div class="mg-name">记忆翻牌</div>
+                <div class="mg-desc">4×4 武器图标配对，记住位置，用最少步数完成所有配对</div>
+                <div class="mg-footer">
+                  <span class="mg-reward">⭐ 最高 +40 分</span>
+                  <button class="mg-play-btn" onclick="event.stopPropagation();playMiniGame('memory')">开始</button>
+                </div>
+              </div>
+            </div>
+
           </div>
         </div>
-        <!-- 小游戏画布 -->
-        <div id="minigame-area" style="display:none;flex:1;padding:0 20px 20px;flex-direction:column;gap:10px;"></div>
+        <!-- 游戏运行区（覆盖面板）-->
+        <div id="mg-game-wrap" class="mg-game-wrap" style="display:none;">
+          <div class="mg-game-header">
+            <span id="mg-game-title" class="mg-game-title"></span>
+            <button class="mg-game-close" onclick="closeMiniGame()">✕ 退出</button>
+          </div>
+          <div class="mg-game-body" id="mg-game-body"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -1882,71 +1995,528 @@ function sendLobbyChat(){
 // ─────────────────────────────────────────────────────────────────────────────
 //  小游戏（简单实现）
 // ─────────────────────────────────────────────────────────────────────────────
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  小游戏系统
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+let _mgActive = false;
+let _mgAnimId = null;
+let _mgTimerId = null;
+
 function playMiniGame(type){
-    const area = document.getElementById('minigame-area');
-    area.style.display = 'flex';
-    area.innerHTML = '';
-    if(type === 'reaction'){
-        let score = 0, hits = 0, total = 10, started = false;
-        area.innerHTML = `<div style="text-align:center;">
-          <h3 style="margin-bottom:12px;">⚡ 反应测试 (${total}轮)</h3>
-          <div id="reaction-target" style="width:80px;height:80px;border-radius:50%;background:var(--red);margin:20px auto;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:2rem;transition:all 0.2s;">等待</div>
-          <div id="reaction-score">击中: 0/${total}</div>
-          <button style="margin-top:12px;padding:8px 20px;background:var(--accent);color:#fff;border-radius:6px;" onclick="startReactionGame()">开始</button>
-        </div>`;
-    } else if(type === 'quiz'){
-        const questions = [
-            {q:'AK-47使用哪种口径弹药？',options:['5.56mm','7.62mm','9mm','12.7mm'],ans:1},
-            {q:'狙击步枪的英文缩写是？',options:['SMG','LMG','DMR','HMG'],ans:2},
-            {q:'下列哪种是霰弹枪？',options:['MP5','SVD','SPAS-12','M4A1'],ans:2},
-        ];
-        let qi = 0, sc = 0;
-        function showQ(){
-            if(qi>=questions.length){ area.innerHTML=`<div style="text-align:center;padding:20px;"><h3>答对 ${sc}/${questions.length} 题 +${sc*5} 分</h3><button style="margin-top:12px;padding:8px 20px;background:var(--accent);color:#fff;border-radius:6px;" onclick="area.style.display='none'">关闭</button></div>`; if(socket && sc>0) { me.score+=sc*5; updateScoreBadge(); } return; }
-            const q = questions[qi];
-            area.innerHTML = `<div style="padding:20px;max-width:400px;margin:0 auto;">
-              <h3 style="margin-bottom:16px;">Q${qi+1}：${q.q}</h3>
-              ${q.options.map((o,i)=>`<button onclick="quizAns(${i},${q.ans})" style="display:block;width:100%;margin:6px 0;padding:9px;background:var(--bg-panel);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;">${o}</button>`).join('')}
-            </div>`;
-        }
-        window.quizAns = (i,ans)=>{ if(i===ans)sc++; qi++; showQ(); };
-        showQ();
-    } else {
-        area.innerHTML = `<div style="text-align:center;padding:30px;color:var(--text-dim);">该小游戏即将上线 🚀<br><button style="margin-top:12px;padding:8px 20px;background:var(--bg-panel);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;" onclick="document.getElementById('minigame-area').style.display='none'">关闭</button></div>`;
-    }
+    const wrap = document.getElementById('mg-game-wrap');
+    const body = document.getElementById('mg-game-body');
+    const title = document.getElementById('mg-game-title');
+    wrap.style.display = 'flex';
+    body.innerHTML = '';
+    _mgActive = true;
+    cancelAnimationFrame(_mgAnimId); clearInterval(_mgTimerId);
+
+    const names = { aim:'🎯 靶场训练', reaction:'⚡ 反应测试', quiz:'🧠 军事问答', memory:'🃏 记忆翻牌' };
+    title.textContent = names[type] || type;
+
+    if(type === 'aim')      _startAimTrainer(body);
+    else if(type === 'reaction') _startReaction(body);
+    else if(type === 'quiz')     _startQuiz(body);
+    else if(type === 'memory')   _startMemory(body);
 }
-window.startReactionGame = function(){
-    let hits=0,total=10,times=[];
-    const btn = document.querySelector('#reaction-target');
-    if(!btn) return;
-    btn.textContent='准备';
-    btn.style.cursor='default'; btn.style.background='var(--text-dim)';
-    let i=0;
+
+function closeMiniGame(){
+    _mgActive = false;
+    cancelAnimationFrame(_mgAnimId); clearInterval(_mgTimerId);
+    _mgAnimId = null; _mgTimerId = null;
+    document.getElementById('mg-game-wrap').style.display = 'none';
+    document.getElementById('mg-game-body').innerHTML = '';
+}
+
+function _mgReward(pts, body){
+    if(pts > 0){ me.score += pts; updateScoreBadge();
+        if(_sb) _sb.from('bf_users').update({score:me.score}).eq('id',me.playerId).then(()=>{}); }
+}
+
+// ─── 评级 ──────────────────────────────────────────────
+function _grade(pct){ return pct>=95?'S+':pct>=85?'S':pct>=70?'A':pct>=55?'B':pct>=40?'C':'D'; }
+
+// ─── 结算面板 ──────────────────────────────────────────
+function _showResult(body, grade, title, earned, stats){
+    const gradeColors = {'S+':'#f5c518','S':'#f5c518','A':'#00c8ff','B':'#2ecc71','C':'#f39c12','D':'#e74c3c'};
+    const statsHtml = stats.map(s=>`<div class="mg-result-stat"><div class="mg-result-stat-val">${s.v}</div><div class="mg-result-stat-lbl">${s.l}</div></div>`).join('');
+    body.innerHTML = `<div class="mg-result">
+      <div class="mg-grade" style="color:${gradeColors[grade]||'#fff'};text-shadow:0 0 30px ${gradeColors[grade]||'#fff'}88;">${grade}</div>
+      <div class="mg-result-title">${title}</div>
+      <div style="font-size:1.1rem;color:var(--gold);font-weight:700;">+${earned} 积分</div>
+      <div class="mg-result-stats">${statsHtml}</div>
+      <div style="display:flex;gap:12px;margin-top:4px;">
+        <button onclick="closeMiniGame()" style="padding:10px 24px;background:var(--bg-panel);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;">返回大厅</button>
+        <button onclick="playMiniGame(document.getElementById('mg-game-title').textContent.includes('靶场')?'aim':document.getElementById('mg-game-title').textContent.includes('反应')?'reaction':document.getElementById('mg-game-title').textContent.includes('问答')?'quiz':'memory')" style="padding:10px 24px;background:linear-gradient(135deg,#005580,#0099cc);border:none;border-radius:8px;color:#fff;cursor:pointer;font-weight:600;">再来一局</button>
+      </div>
+    </div>`;
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  靶场训练（Canvas 射击游戏）
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function _startAimTrainer(body){
+    body.innerHTML = `
+      <div class="mg-hud">
+        <div class="mg-hud-item"><div class="mg-hud-val" id="aim-time">60</div><div class="mg-hud-lbl">剩余时间</div></div>
+        <div class="mg-hud-item"><div class="mg-hud-val" id="aim-score-live">0</div><div class="mg-hud-lbl">得分</div></div>
+        <div class="mg-hud-item"><div class="mg-hud-val" id="aim-hits">0</div><div class="mg-hud-lbl">命中</div></div>
+        <div class="mg-hud-item"><div class="mg-hud-val" id="aim-miss">0</div><div class="mg-hud-lbl">未命中</div></div>
+        <div style="margin-left:auto;font-size:0.72rem;color:var(--text-dim);align-self:center;">
+          🔴小=3分 🟡中=2分 🔵大=1分
+        </div>
+      </div>
+      <canvas id="aim-canvas" style="flex:1;cursor:crosshair;display:block;width:100%;"></canvas>`;
+
+    const canvas = document.getElementById('aim-canvas');
+    const ctx = canvas.getContext('2d');
+    let score=0, hits=0, misses=0, timeLeft=60;
+    let targets=[], muzzleFlashes=[];
+    let gameActive = true;
+    let mx=0, my=0;
+    let difficulty = 1;
+
+    function resize(){
+        canvas.width  = canvas.offsetWidth;
+        canvas.height = canvas.offsetHeight;
+    }
+    resize();
+    window.addEventListener('resize', resize);
+
+    function spawnTarget(){
+        if(!gameActive) return;
+        const W=canvas.width, H=canvas.height;
+        const r = Math.random()<0.3 ? 16 : Math.random()<0.55 ? 26 : 38;
+        const pts = r<=16?3:r<=26?2:1;
+        const vx = (Math.random()-0.5) * (1.5+difficulty*0.5);
+        const vy = (Math.random()-0.5) * (1.5+difficulty*0.5);
+        targets.push({
+            x: r+Math.random()*(W-r*2), y: r+Math.random()*(H-r*2),
+            vx, vy, r, pts,
+            born: Date.now(),
+            life: Math.max(1200, 2200-difficulty*200),
+            opacity:0, scale:0, hit:false, hitTime:0
+        });
+    }
+
+    // Timer
+    _mgTimerId = setInterval(()=>{
+        if(!gameActive) return;
+        timeLeft--;
+        const el = document.getElementById('aim-time');
+        if(el){ el.textContent=timeLeft; if(timeLeft<=10) el.style.color='var(--red)'; }
+        difficulty = 1+Math.floor((60-timeLeft)/15)*0.5;
+        if(timeLeft<=0){
+            gameActive=false; clearInterval(_mgTimerId);
+            cancelAnimationFrame(_mgAnimId);
+            const acc = hits+misses>0?Math.round(hits/(hits+misses)*100):0;
+            const earned = Math.min(80, score);
+            _mgReward(earned);
+            const g = _grade(acc);
+            setTimeout(()=> _showResult(body, g,
+                acc>=80?'神枪手！':acc>=60?'优秀射手':'继续训练',
+                earned,[
+                {v:score,l:'总得分'},{v:hits,l:'命中数'},{v:acc+'%',l:'命中率'}
+            ]), 400);
+        }
+    }, 1000);
+
+    // Spawn loop
+    spawnTarget();
+    let spawnT=0;
+    function spawnLoop(ts){
+        if(!gameActive) return;
+        if(ts-spawnT > Math.max(500,900-difficulty*80)){ spawnT=ts; spawnTarget(); }
+        _mgAnimId = requestAnimationFrame(render);
+    }
+
+    function render(ts){
+        if(!gameActive || !document.getElementById('aim-canvas')){ return; }
+        const W=canvas.width, H=canvas.height;
+        // Background
+        ctx.fillStyle='#060c14';
+        ctx.fillRect(0,0,W,H);
+        // Grid
+        ctx.strokeStyle='rgba(0,150,255,0.06)'; ctx.lineWidth=1;
+        for(let x=0;x<W;x+=50){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+        for(let y=0;y<H;y+=50){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+        // Vignette
+        const vg=ctx.createRadialGradient(W/2,H/2,H*0.3,W/2,H/2,H*0.8);
+        vg.addColorStop(0,'rgba(0,0,0,0)'); vg.addColorStop(1,'rgba(0,0,0,0.45)');
+        ctx.fillStyle=vg; ctx.fillRect(0,0,W,H);
+
+        const now=Date.now();
+        // Update & draw targets
+        targets = targets.filter(t=>{
+            const age=(now-t.born)/t.life;
+            if(t.hit){
+                const frac=(now-t.hitTime)/250;
+                if(frac>=1) return false;
+                ctx.globalAlpha=1-frac;
+                ctx.fillStyle='#ffee44';
+                ctx.beginPath(); ctx.arc(t.x,t.y,t.r*(1+frac),0,Math.PI*2); ctx.fill();
+                // Score popup
+                ctx.fillStyle='#fff'; ctx.font=`bold ${14+frac*8}px sans-serif`;
+                ctx.textAlign='center'; ctx.textBaseline='middle';
+                ctx.fillText('+'+t.pts, t.x, t.y-t.r-frac*30);
+                ctx.globalAlpha=1; return true;
+            }
+            if(age>=1) return false;
+            // Move
+            t.x+=t.vx; t.y+=t.vy;
+            if(t.x<t.r||t.x>W-t.r) t.vx*=-1;
+            if(t.y<t.r||t.y>H-t.r) t.vy*=-1;
+            t.scale = age<0.1?age/0.1:age>0.8?(1-age)/0.2:1;
+            t.opacity = age>0.8?(1-age)/0.2:1;
+            ctx.globalAlpha=t.opacity;
+            const col = t.r<=16?{r:'#ff4444',f:'rgba(255,60,60,0.25)',c:'#ff6666'}
+                       :t.r<=26?{r:'#ffaa22',f:'rgba(255,160,30,0.2)',c:'#ffcc55'}
+                       :       {r:'#4488ff',f:'rgba(50,130,255,0.15)',c:'#66aaff'};
+            ctx.save(); ctx.translate(t.x,t.y); ctx.scale(t.scale,t.scale);
+            // Outer ring
+            ctx.strokeStyle=col.r; ctx.lineWidth=2.5;
+            ctx.beginPath(); ctx.arc(0,0,t.r,0,Math.PI*2); ctx.stroke();
+            // Fill
+            ctx.fillStyle=col.f; ctx.beginPath(); ctx.arc(0,0,t.r-2,0,Math.PI*2); ctx.fill();
+            // Inner rings
+            if(t.r>=26){
+                ctx.strokeStyle=col.c+'88'; ctx.lineWidth=1;
+                ctx.beginPath(); ctx.arc(0,0,t.r*0.55,0,Math.PI*2); ctx.stroke();
+            }
+            // Center dot
+            ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(0,0,2.5,0,Math.PI*2); ctx.fill();
+            ctx.restore();
+            // pts label
+            ctx.fillStyle=col.c; ctx.font=`bold ${Math.floor(t.r*0.45)}px sans-serif`;
+            ctx.textAlign='center'; ctx.textBaseline='middle';
+            ctx.fillText(t.pts+'pt',t.x,t.y);
+            ctx.globalAlpha=1; return true;
+        });
+
+        // Muzzle flashes (click effects)
+        muzzleFlashes = muzzleFlashes.filter(f=>{
+            const frac=(now-f.time)/120;
+            if(frac>=1) return false;
+            ctx.globalAlpha=(1-frac)*0.7;
+            ctx.strokeStyle='#ffee88'; ctx.lineWidth=1.5;
+            for(let a=0;a<8;a++){
+                const ang=a*Math.PI/4, len=(8+frac*12);
+                ctx.beginPath(); ctx.moveTo(f.x+Math.cos(ang)*4,f.y+Math.sin(ang)*4);
+                ctx.lineTo(f.x+Math.cos(ang)*len,f.y+Math.sin(ang)*len); ctx.stroke();
+            }
+            ctx.globalAlpha=1; return true;
+        });
+
+        // Crosshair
+        ctx.strokeStyle='rgba(255,255,255,0.7)'; ctx.lineWidth=1.5;
+        const cs=12;
+        ctx.beginPath(); ctx.moveTo(mx-cs,my); ctx.lineTo(mx+cs,my); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(mx,my-cs); ctx.lineTo(mx,my+cs); ctx.stroke();
+        ctx.strokeStyle='rgba(255,200,0,0.5)'; ctx.lineWidth=1;
+        ctx.beginPath(); ctx.arc(mx,my,4,0,Math.PI*2); ctx.stroke();
+
+        spawnLoop(ts);
+    }
+    _mgAnimId = requestAnimationFrame(render);
+
+    canvas.addEventListener('mousemove',e=>{
+        const rect=canvas.getBoundingClientRect();
+        mx=e.clientX-rect.left; my=e.clientY-rect.top;
+    });
+    canvas.addEventListener('click',e=>{
+        if(!gameActive) return;
+        const rect=canvas.getBoundingClientRect();
+        const cx=e.clientX-rect.left, cy=e.clientY-rect.top;
+        muzzleFlashes.push({x:cx,y:cy,time:Date.now()});
+        let hitAny=false;
+        for(let i=targets.length-1;i>=0;i--){
+            const t=targets[i]; if(t.hit) continue;
+            const dx=cx-t.x,dy=cy-t.y;
+            if(dx*dx+dy*dy<=t.r*t.r){
+                t.hit=true; t.hitTime=Date.now();
+                score+=t.pts; hits++;
+                hitAny=true;
+                const sl=document.getElementById('aim-score-live');
+                const hl=document.getElementById('aim-hits');
+                if(sl) sl.textContent=score; if(hl) hl.textContent=hits;
+                break;
+            }
+        }
+        if(!hitAny){ misses++; const ml=document.getElementById('aim-miss'); if(ml) ml.textContent=misses; }
+    });
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  反应测试
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function _startReaction(body){
+    let round=0,total=10,hits=0,times=[],state='idle',tid=null;
+    body.innerHTML=`<div class="reaction-wrap">
+      <div style="font-size:0.82rem;color:var(--text-dim);">第 <span id="rnd">0</span>/${total} 轮 · 命中 <span id="rhits">0</span></div>
+      <div id="rzone" class="reaction-zone waiting" style="width:180px;height:180px;font-size:1.4rem;">
+        点击开始
+      </div>
+      <div id="rinfo" style="font-size:0.9rem;color:var(--text-dim);min-height:24px;text-align:center;"></div>
+      <div id="rtimes" style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center;max-width:380px;"></div>
+    </div>`;
+
+    const zone=document.getElementById('rzone');
+    const info=document.getElementById('rinfo');
     function nextRound(){
-        if(i>=total){
-            const avg = times.length ? (times.reduce((a,b)=>a+b,0)/times.length).toFixed(0) : '?';
-            const earned = Math.min(50, hits*5);
-            if(socket && earned>0){ me.score+=earned; updateScoreBadge(); }
-            document.getElementById('minigame-area').innerHTML=`<div style="text-align:center;padding:20px;"><h3>结束！命中 ${hits}/${total}，平均反应 ${avg}ms<br>获得 +${earned} 分</h3><button style="margin-top:12px;padding:8px 20px;background:var(--accent);color:#fff;border-radius:6px;" onclick="document.getElementById('minigame-area').style.display='none'">关闭</button></div>`;
+        if(round>=total){
+            const avg=times.length?Math.round(times.reduce((a,b)=>a+b)/times.length):999;
+            const acc=Math.round(hits/total*100);
+            const earned=Math.min(50,hits*5);
+            _mgReward(earned);
+            const g=avg<220?'S+':avg<280?'S':avg<340?'A':avg<420?'B':avg<550?'C':'D';
+            setTimeout(()=>_showResult(body,g,
+                avg<250?'反应神速！':avg<350?'反应良好':'继续训练',
+                earned,[{v:avg+'ms',l:'平均反应'},{v:hits+'/'+total,l:'命中轮次'},{v:acc+'%',l:'成功率'}]),200);
             return;
         }
-        const delay = 1000+Math.random()*2000;
-        const t0 = Date.now();
-        btn.style.background='var(--text-dim)'; btn.textContent='…'; btn.style.cursor='default';
-        setTimeout(()=>{
-            btn.style.background='var(--green)'; btn.textContent='点！'; btn.style.cursor='pointer';
-            const tid = setTimeout(()=>{ hits; i++; nextRound(); },1500);
-            btn.onclick=()=>{
-                clearTimeout(tid);
-                times.push(Date.now()-t0-delay);
-                hits++; i++;
-                document.getElementById('reaction-score').textContent=`命中: ${hits}/${total}`;
-                nextRound();
-            };
-        }, delay);
+        round++; document.getElementById('rnd').textContent=round;
+        state='waiting';
+        zone.className='reaction-zone waiting'; zone.textContent='等待…';
+        info.textContent='绿灯亮起后立即点击！';
+        const delay=800+Math.random()*2500;
+        tid=setTimeout(()=>{
+            state='ready'; zone.className='reaction-zone ready'; zone.textContent='点击！';
+            tid=setTimeout(()=>{
+                state='late'; zone.className='reaction-zone early'; zone.textContent='太慢了';
+                info.textContent='超时，本轮未计分';
+                addTimeChip('超时','#555');
+                setTimeout(nextRound,900);
+            },1500);
+        },delay);
     }
-    nextRound();
-};
+    zone.onclick=()=>{
+        if(state==='idle'){ nextRound(); return; }
+        if(state==='waiting'){ clearTimeout(tid); state='early';
+            zone.className='reaction-zone early'; zone.textContent='太早了！';
+            info.textContent='还没亮灯就点了！本轮不计分';
+            addTimeChip('抢先','#e74c3c');
+            setTimeout(nextRound,900); return; }
+        if(state==='ready'){
+            clearTimeout(tid);
+            const reacted = parseInt(zone.dataset.t0)||0;
+            // approximate: use born time from setTimeout
+            // better: record when green showed
+            const ms = Math.round(200+Math.random()*300); // placeholder; real impl below
+            times.push(ms); hits++; state='hit';
+            zone.className='reaction-zone'; zone.style.background='rgba(0,200,255,0.25)';
+            zone.style.borderColor='var(--accent)'; zone.style.color='var(--accent)';
+            zone.textContent=ms+'ms';
+            document.getElementById('rhits').textContent=hits;
+            addTimeChip(ms+'ms', ms<300?'var(--green)':ms<450?'var(--gold)':'var(--red)');
+            setTimeout(()=>{ zone.style.background=''; zone.style.borderColor=''; zone.style.color=''; nextRound(); },700);
+        }
+    };
+    // Real timing
+    const origTimeout=window.setTimeout;
+    let _greenTime=0;
+    zone.onclick=(()=>{
+        const orig=zone.onclick;
+        return function(){
+            if(state==='ready'){
+                clearTimeout(tid);
+                const ms=Math.round(Date.now()-_greenTime);
+                times.push(ms); hits++; state='hit';
+                zone.className='reaction-zone'; zone.style.cssText='width:180px;height:180px;font-size:1.4rem;border:4px solid var(--accent);background:rgba(0,200,255,0.15);color:var(--accent);cursor:pointer;';
+                zone.textContent=ms+'ms';
+                document.getElementById('rhits').textContent=hits;
+                addTimeChip(ms+'ms', ms<250?'var(--green)':ms<380?'var(--gold)':'var(--red)');
+                setTimeout(()=>{ zone.style.cssText=''; nextRound(); },700);
+            } else { orig.call(this); }
+        };
+    })();
+
+    // patch ready state to record time
+    const origNext=nextRound;
+    function patchedReady(){
+        const origSetTimeout=setTimeout;
+        state='waiting'; zone.className='reaction-zone waiting'; zone.textContent='等待…';
+        const delay2=800+Math.random()*2500;
+        tid=origSetTimeout(()=>{
+            state='ready'; _greenTime=Date.now();
+            zone.className='reaction-zone ready'; zone.textContent='点击！';
+            tid=origSetTimeout(()=>{
+                if(state!=='ready') return;
+                state='late'; zone.className='reaction-zone early'; zone.textContent='超时';
+                addTimeChip('超时','#555');
+                setTimeout(origNext,900);
+            },1500);
+        },delay2);
+    }
+    // re-wire
+    zone.onclick=function(){
+        if(state==='idle'){ round=0; hits=0; times=[]; document.getElementById('rtimes').innerHTML='';
+            patchedReady(); document.getElementById('rnd').textContent=round+1; return; }
+        if(state==='waiting'){ clearTimeout(tid); state='early';
+            zone.className='reaction-zone early'; zone.textContent='太早了！';
+            addTimeChip('抢先','#e74c3c');
+            setTimeout(patchedReady,900); return; }
+        if(state==='ready'){
+            clearTimeout(tid);
+            const ms=Math.round(Date.now()-_greenTime);
+            times.push(ms); hits++; round++; state='hit';
+            zone.className='reaction-zone';
+            zone.style.cssText='width:180px;height:180px;font-size:1.4rem;border:4px solid var(--accent);background:rgba(0,200,255,0.15);color:var(--accent);cursor:pointer;border-radius:50%;display:flex;align-items:center;justify-content:center;';
+            zone.textContent=ms+'ms';
+            document.getElementById('rnd').textContent=round;
+            document.getElementById('rhits').textContent=hits;
+            addTimeChip(ms+'ms', ms<250?'var(--green)':ms<400?'var(--gold)':'var(--red)');
+            if(round>=total){
+                setTimeout(()=>{
+                    const avg=Math.round(times.reduce((a,b)=>a+b)/times.length);
+                    const earned=Math.min(50,hits*5);
+                    _mgReward(earned);
+                    const g=avg<220?'S+':avg<280?'S':avg<340?'A':avg<420?'B':avg<550?'C':'D';
+                    _showResult(body,g,avg<250?'反应神速！':avg<350?'反应良好':'继续训练',
+                        earned,[{v:avg+'ms',l:'平均反应'},{v:hits+'/'+total,l:'命中轮次'},{v:Math.round(hits/total*100)+'%',l:'成功率'}]);
+                },800);
+            } else {
+                setTimeout(()=>{ zone.style.cssText=''; patchedReady(); },700);
+            }
+        }
+    };
+
+    function addTimeChip(label,color){
+        const el=document.getElementById('rtimes');
+        if(!el) return;
+        const c=document.createElement('span');
+        c.style.cssText=`padding:3px 9px;border-radius:12px;font-size:0.75rem;font-weight:600;background:${color}22;color:${color};border:1px solid ${color}55;`;
+        c.textContent=label; el.appendChild(c);
+    }
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  军事问答（12题）
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function _startQuiz(body){
+    const Qs=[
+        {q:'AK-74 使用哪种口径弹药？',opts:['5.56×45mm','7.62×39mm','5.45×39mm','9×19mm'],ans:2},
+        {q:'M4A1 的有效射程大约是多少？',opts:['200m','500m','1000m','150m'],ans:1},
+        {q:'SVD 狙击步枪的原产国是？',opts:['美国','德国','俄罗斯','以色列'],ans:2},
+        {q:'SPAS-12 是哪类武器？',opts:['突击步枪','狙击步枪','霰弹枪','机枪'],ans:2},
+        {q:'"SMG" 代表什么？',opts:['SubMachineGun','SniperMusicGun','SoldierMachine','SquadMortarGun'],ans:0},
+        {q:'格洛克手枪的主要框架材质是？',opts:['钢铁','铝合金','聚合物/塑料','钛合金'],ans:2},
+        {q:'RPK-74 弹鼓容量是多少发？',opts:['30发','45发','75发','100发'],ans:2},
+        {q:'"弹道系数"(BC) 越高代表什么？',opts:['弹头越重','穿透力越弱','飞行时受风阻影响越小','射速越快'],ans:2},
+        {q:'以下哪款枪是"无托"结构？',opts:['M4A1','AUG','AK-74','MP5'],ans:1},
+        {q:'消音器主要抑制的是什么声音？',opts:['子弹超音速爆鸣','枪机撞击声','膛内爆炸声','弹壳落地声'],ans:2},
+        {q:'枪支上的 "MOA" 是什么单位？',opts:['秒差距','角分','分贝','米每秒'],ans:1},
+        {q:'近距离战斗缩写"CQB"的全称是？',opts:['Close Quarter Battle','Combat Quick Burst','Cover Quality Base','Caliber Quantity Barrel'],ans:0},
+    ];
+    const shuffled=[...Qs].sort(()=>Math.random()-0.5);
+    let qi=0,sc=0,answered=false;
+
+    function render(){
+        if(qi>=shuffled.length){
+            const pct=Math.round(sc/shuffled.length*100);
+            const earned=sc*5;
+            _mgReward(earned);
+            const g=_grade(pct);
+            _showResult(body,g,sc>=10?'博学多才！':sc>=7?'知识丰富':'多学多练',
+                earned,[{v:sc+'/'+shuffled.length,l:'答对题数'},{v:pct+'%',l:'正确率'},{v:earned+'分',l:'获得积分'}]);
+            return;
+        }
+        const q=shuffled[qi];
+        const pct=Math.round(qi/shuffled.length*100);
+        body.innerHTML=`<div class="quiz-wrap" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;">
+          <div class="quiz-progress"><div class="quiz-progress-fill" style="width:${pct}%"></div></div>
+          <div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:8px;">第 ${qi+1}/${shuffled.length} 题 · 已得 ${sc*5} 分</div>
+          <div class="quiz-q">${q.q}</div>
+          <div id="quiz-opts">${q.opts.map((o,i)=>`<button class="quiz-opt" onclick="_quizPick(${i})" data-i="${i}">${String.fromCharCode(65+i)}. ${o}</button>`).join('')}</div>
+          <div id="quiz-feedback" style="min-height:40px;margin-top:8px;font-size:0.85rem;font-weight:600;"></div>
+        </div>`;
+        answered=false;
+    }
+    window._quizPick=function(i){
+        if(answered) return; answered=true;
+        const q=shuffled[qi];
+        const opts=document.querySelectorAll('.quiz-opt');
+        opts.forEach((o,idx)=>{
+            o.disabled=true;
+            if(idx===q.ans) o.classList.add('correct');
+            else if(idx===i&&i!==q.ans) o.classList.add('wrong');
+        });
+        const fb=document.getElementById('quiz-feedback');
+        if(i===q.ans){ sc++; fb.style.color='var(--green)'; fb.textContent='✓ 正确！+5 分'; }
+        else { fb.style.color='var(--red)'; fb.textContent=`✗ 错误，正确答案是 ${String.fromCharCode(65+q.ans)}`; }
+        setTimeout(()=>{ qi++; render(); },1200);
+    };
+    render();
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  记忆翻牌
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function _startMemory(body){
+    const ICONS=['🔫','🎯','💣','🛡️','⚔️','🔩','🧨','🪖'];
+    let cards=[...ICONS,...ICONS].sort(()=>Math.random()-0.5)
+        .map((ic,i)=>({id:i,icon:ic,flipped:false,matched:false}));
+    let first=null,second=null,moves=0,matches=0,locked=false;
+    const total=ICONS.length;
+    let startTime=Date.now();
+
+    function render(){
+        body.innerHTML=`
+          <div style="display:flex;justify-content:space-between;padding:10px 16px;border-bottom:1px solid var(--border);font-size:0.82rem;">
+            <span>步数：<b id="mem-moves">0</b></span>
+            <span>配对：<b id="mem-matched">0</b>/${total}</span>
+            <span>用时：<b id="mem-timer">0s</b></span>
+          </div>
+          <div style="flex:1;display:flex;align-items:center;justify-content:center;overflow:auto;">
+            <div class="memory-grid">
+              ${cards.map((c,i)=>`
+                <div class="mem-card ${c.matched?'matched':c.flipped?'flipped':'face-down'}"
+                     data-i="${i}" onclick="_memFlip(${i})" style="font-size:${c.flipped||c.matched?'1.8rem':'0'};">
+                  ${c.matched||c.flipped?c.icon:''}
+                </div>`).join('')}
+            </div>
+          </div>`;
+        // Timer
+        clearInterval(_mgTimerId);
+        _mgTimerId=setInterval(()=>{
+            const el=document.getElementById('mem-timer');
+            if(el) el.textContent=Math.round((Date.now()-startTime)/1000)+'s';
+        },500);
+    }
+
+    window._memFlip=function(i){
+        if(locked||cards[i].flipped||cards[i].matched) return;
+        cards[i].flipped=true;
+        if(!first){ first=i; render(); return; }
+        second=i; locked=true; moves++;
+        document.getElementById('mem-moves').textContent=moves;
+        render();
+        setTimeout(()=>{
+            if(cards[first].icon===cards[second].icon){
+                cards[first].matched=cards[second].matched=true;
+                matches++;
+                document.getElementById('mem-matched').textContent=matches;
+                if(matches===total){
+                    clearInterval(_mgTimerId);
+                    const secs=Math.round((Date.now()-startTime)/1000);
+                    const earned=Math.max(0,Math.min(40,40-Math.max(0,moves-total)*2));
+                    _mgReward(earned);
+                    const g=moves<=total+2?'S+':moves<=total+5?'A':moves<=total+10?'B':'C';
+                    setTimeout(()=>_showResult(body,g,moves<=total+3?'记忆达人！':'完成配对！',
+                        earned,[{v:moves,l:'总步数'},{v:secs+'s',l:'用时'},{v:earned+'分',l:'积分奖励'}]),300);
+                }
+                first=null; second=null; locked=false; render();
+            } else {
+                cards[first].flipped=cards[second].flipped=false;
+                first=null; second=null; locked=false; render();
+            }
+        },800);
+    };
+    render();
+}
+
+// 旧的兼容函数（保留空壳防止报错）
+window.startReactionGame=function(){};
+window.quizAns=function(){};
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  ★★★  Three.js 多人游戏场景  ★★★
