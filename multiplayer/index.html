@@ -1068,6 +1068,18 @@ input{outline:none;border:none;}
               </div>
             </div>
 
+            <div class="mg-card" onclick="playMiniGame('schulte')">
+              <div class="mg-banner" style="background:linear-gradient(135deg,#0a1a3a,#103070);">🔢</div>
+              <div class="mg-body">
+                <div class="mg-name">数字搜寻</div>
+                <div class="mg-desc">5×5方格中按顺序找到并点击 1→25，锻炼视觉搜索与注意力分配</div>
+                <div class="mg-footer">
+                  <span class="mg-reward">⭐ 最高 +45 分</span>
+                  <button class="mg-play-btn" onclick="event.stopPropagation();playMiniGame('schulte')">开始</button>
+                </div>
+              </div>
+            </div>
+
           </div>
         </div>
         <!-- 游戏运行区（覆盖面板）-->
@@ -1183,9 +1195,6 @@ input{outline:none;border:none;}
     </div>
   </div>
 </div>
-
-<!-- Toast 提示 -->
-<div class="toast" id="toast"></div>
 
 <!-- Toast 提示 -->
 <div class="toast" id="toast"></div>
@@ -1349,7 +1358,7 @@ function connectSocket(onConnected){
         socket.on('game:kill',    data => onKillFeed(data));
         socket.on('game:death',   data => onDeath(data));
         socket.on('game:respawn', data => onRespawn(data));
-        socket.on('game:end',     data => _onGameEnd(data));
+        socket.on('game:end',     data => onGameEnd(data));
         // 商店
         socket.on('shop:buyOk',   data => { me.score=data.newScore; me.skins=data.skins; updateScoreBadge(); renderShop(); showToast('购买成功！皮肤已解锁'); });
         socket.on('shop:buyFail', data => showToast(`购买失败：${data.reason}`));
@@ -1473,8 +1482,7 @@ async function _sbFriendList(){
     await loadFriends();
 }
 async function _sbFriendAdd({ targetId }){
-    // 由 searchFriend() + sendFriendRequest() 接管
-    await searchFriend();
+    if(targetId) await sendFriendRequest(targetId);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1559,16 +1567,33 @@ function _showRoomLobby(code, isHost){
     const div = document.createElement('div');
     div.id = 'room-lobby-overlay';
     div.style.cssText = 'position:fixed;inset:0;background:rgba(6,10,15,0.96);display:flex;align-items:center;justify-content:center;z-index:9999;flex-direction:column;gap:20px;';
+    const friendInviteHtml = _friendsList.length
+        ? _friendsList.map(f=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--bg-panel);border-radius:6px;">
+            <span style="font-size:1.1rem;">${escHtml(f.avatar||'😎')}</span>
+            <span style="flex:1;font-size:0.82rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(f.name)}</span>
+            <button onclick="inviteFriendToRoom('${f.id}','${escHtml(f.name)}')" style="padding:3px 10px;background:var(--accent);color:#fff;border:none;border-radius:4px;font-size:0.72rem;cursor:pointer;white-space:nowrap;">邀请</button>
+          </div>`).join('')
+        : '<div style="color:var(--text-dim);font-size:0.78rem;text-align:center;padding:8px;">暂无好友</div>';
+
     div.innerHTML = `
-        <div style="font-size:2rem;font-weight:700;color:var(--accent);">🔑 房间码：${code}</div>
-        <div style="color:var(--text-dim);font-size:0.88rem;">把此房间码发给朋友 → 他们在"加入房间"输入框里输入即可加入</div>
-        <div id="room-player-list" style="min-width:280px;background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:8px;">
-            <div style="color:var(--text-dim);">等待玩家加入…</div>
+        <div style="font-size:2rem;font-weight:700;color:var(--accent);letter-spacing:0.15em;">🔑 ${code}</div>
+        <div style="color:var(--text-dim);font-size:0.82rem;text-align:center;">把房间码发给朋友，他们在"加入房间"输入即可</div>
+        <div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;justify-content:center;">
+          <div style="display:flex;flex-direction:column;gap:8px;min-width:200px;">
+            <div style="font-size:0.75rem;color:var(--text-dim);letter-spacing:0.06em;">📋 房间玩家</div>
+            <div id="room-player-list" style="min-width:200px;background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:6px;min-height:60px;">
+              <div style="color:var(--text-dim);font-size:0.82rem;">等待玩家加入…</div>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px;min-width:180px;max-width:220px;">
+            <div style="font-size:0.75rem;color:var(--text-dim);letter-spacing:0.06em;">📨 邀请好友</div>
+            <div style="display:flex;flex-direction:column;gap:5px;max-height:140px;overflow-y:auto;">${friendInviteHtml}</div>
+          </div>
         </div>
         ${isHost
-            ? `<button id="room-start-btn" onclick="sbStartRoom()" style="padding:14px 48px;background:linear-gradient(135deg,#1a6b35,#27ae60);color:#fff;border-radius:8px;font-size:1rem;font-weight:600;cursor:pointer;border:none;transition:all 0.2s;">开始游戏（1 人）</button>`
+            ? `<button id="room-start-btn" onclick="sbStartRoom()" style="padding:13px 48px;background:linear-gradient(135deg,#1a6b35,#27ae60);color:#fff;border-radius:8px;font-size:1rem;font-weight:600;cursor:pointer;border:none;">开始游戏（1 人）</button>`
             : `<div style="color:var(--text-dim);font-size:0.9rem;">⏳ 等待房主开始游戏…</div>`}
-        <button onclick="sbLeaveRoomAndClose()" style="padding:8px 24px;background:transparent;color:var(--text-dim);border:1px solid var(--border);border-radius:6px;cursor:pointer;">离开房间</button>`;
+        <button onclick="sbLeaveRoomAndClose()" style="padding:8px 24px;background:transparent;color:var(--text-dim);border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:0.85rem;">离开房间</button>`;
     document.body.appendChild(div);
 }
 function sbLeaveRoomAndClose(){
@@ -1923,28 +1948,6 @@ function buyItem(skinId){
 // ─────────────────────────────────────────────────────────────────────────────
 //  好友 & 私聊
 // ─────────────────────────────────────────────────────────────────────────────
-function renderFriendsList(friends){
-    const el = document.getElementById('friends-list');
-    el.innerHTML = '';
-    if(!friends.length){
-        el.innerHTML='<div style="padding:16px;color:var(--text-dim);font-size:0.82rem;text-align:center;">暂无好友<br>点击 + 添加</div>';
-        return;
-    }
-    friends.forEach(fid=>{
-        const div = document.createElement('div');
-        div.className = 'friend-item' + (currentFriend===fid?' active':'');
-        const colors = ['#e74c3c','#3498db','#2ecc71','#f39c12','#9b59b6','#1abc9c'];
-        const color  = colors[fid.charCodeAt(2)%colors.length];
-        div.innerHTML = `
-          <div class="friend-avatar" style="background:${color}">${fid.slice(2,3).toUpperCase()}</div>
-          <div class="friend-info">
-            <div class="friend-name">${escHtml(fid)}</div>
-            <div class="friend-status">在线</div>
-          </div>`;
-        div.onclick = () => openFriendChat(fid);
-        el.appendChild(div);
-    });
-}
 function appendPrivateChat(entry, isHistory=false){
     if(!currentFriend) return;
     if(entry.fromId !== currentFriend && entry.toId !== currentFriend && !isHistory) return;
@@ -2011,13 +2014,14 @@ function playMiniGame(type){
     _mgActive = true;
     cancelAnimationFrame(_mgAnimId); clearInterval(_mgTimerId);
 
-    const names = { aim:'🎯 靶场训练', reaction:'⚡ 反应测试', quiz:'🧠 军事问答', memory:'🃏 记忆翻牌' };
+    const names = { aim:'🎯 靶场训练', reaction:'⚡ 反应测试', quiz:'🧠 军事问答', memory:'🃏 记忆翻牌', schulte:'🔢 数字搜寻' };
     title.textContent = names[type] || type;
 
-    if(type === 'aim')      _startAimTrainer(body);
+    if(type === 'aim')           _startAimTrainer(body);
     else if(type === 'reaction') _startReaction(body);
     else if(type === 'quiz')     _startQuiz(body);
     else if(type === 'memory')   _startMemory(body);
+    else if(type === 'schulte')  _startSchulte(body);
 }
 
 function closeMiniGame(){
@@ -2062,8 +2066,9 @@ function _startAimTrainer(body){
         <div class="mg-hud-item"><div class="mg-hud-val" id="aim-score-live">0</div><div class="mg-hud-lbl">得分</div></div>
         <div class="mg-hud-item"><div class="mg-hud-val" id="aim-hits">0</div><div class="mg-hud-lbl">命中</div></div>
         <div class="mg-hud-item"><div class="mg-hud-val" id="aim-miss">0</div><div class="mg-hud-lbl">未命中</div></div>
+        <div class="mg-hud-item"><div class="mg-hud-val" id="aim-combo" style="color:var(--gold);min-width:90px;font-size:0.9rem;"></div><div class="mg-hud-lbl">连击</div></div>
         <div style="margin-left:auto;font-size:0.72rem;color:var(--text-dim);align-self:center;">
-          🔴小=3分 🟡中=2分 🔵大=1分
+          🔴3分 🟡2分 🔵1分 · 连击加倍
         </div>
       </div>
       <canvas id="aim-canvas" style="flex:1;cursor:crosshair;display:block;width:100%;"></canvas>`;
@@ -2075,6 +2080,7 @@ function _startAimTrainer(body){
     let gameActive = true;
     let mx=0, my=0;
     let difficulty = 1;
+    let combo=0, lastHitTime2=0;
 
     function resize(){
         canvas.width  = canvas.offsetWidth;
@@ -2233,160 +2239,109 @@ function _startAimTrainer(body){
             const t=targets[i]; if(t.hit) continue;
             const dx=cx-t.x,dy=cy-t.y;
             if(dx*dx+dy*dy<=t.r*t.r){
+                const n3=Date.now();
+                if(n3-lastHitTime2<1500) combo=Math.min(combo+1,8); else combo=1;
+                lastHitTime2=n3;
                 t.hit=true; t.hitTime=Date.now();
-                score+=t.pts; hits++;
+                const earn=t.pts+Math.floor(combo/3);
+                score+=earn; hits++;
                 hitAny=true;
                 const sl=document.getElementById('aim-score-live');
                 const hl=document.getElementById('aim-hits');
+                const cl=document.getElementById('aim-combo');
                 if(sl) sl.textContent=score; if(hl) hl.textContent=hits;
+                if(cl) cl.textContent=combo>=2?`×${combo} COMBO!`:'';
+                SFX.aim_hit();
                 break;
             }
         }
-        if(!hitAny){ misses++; const ml=document.getElementById('aim-miss'); if(ml) ml.textContent=misses; }
+        if(!hitAny){
+            combo=0; const cl=document.getElementById('aim-combo'); if(cl) cl.textContent='';
+            misses++; const ml=document.getElementById('aim-miss'); if(ml) ml.textContent=misses;
+        }
     });
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  反应测试
+//  反应测试（重构版：干净的单一 onclick）
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 function _startReaction(body){
-    let round=0,total=10,hits=0,times=[],state='idle',tid=null;
+    const total=10;
+    let round=0, hits=0, times=[], state='idle', tid=null, _greenTime=0;
+
     body.innerHTML=`<div class="reaction-wrap">
-      <div style="font-size:0.82rem;color:var(--text-dim);">第 <span id="rnd">0</span>/${total} 轮 · 命中 <span id="rhits">0</span></div>
-      <div id="rzone" class="reaction-zone waiting" style="width:180px;height:180px;font-size:1.4rem;">
-        点击开始
-      </div>
+      <div style="font-size:0.82rem;color:var(--text-dim);">第 <span id="rnd">-</span>/${total} 轮 · 命中 <span id="rhits">0</span></div>
+      <div id="rzone" class="reaction-zone waiting" style="width:180px;height:180px;font-size:1.4rem;">点击开始</div>
       <div id="rinfo" style="font-size:0.9rem;color:var(--text-dim);min-height:24px;text-align:center;"></div>
       <div id="rtimes" style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center;max-width:380px;"></div>
     </div>`;
 
     const zone=document.getElementById('rzone');
     const info=document.getElementById('rinfo');
-    function nextRound(){
-        if(round>=total){
-            const avg=times.length?Math.round(times.reduce((a,b)=>a+b)/times.length):999;
-            const acc=Math.round(hits/total*100);
-            const earned=Math.min(50,hits*5);
-            _mgReward(earned);
-            const g=avg<220?'S+':avg<280?'S':avg<340?'A':avg<420?'B':avg<550?'C':'D';
-            setTimeout(()=>_showResult(body,g,
-                avg<250?'反应神速！':avg<350?'反应良好':'继续训练',
-                earned,[{v:avg+'ms',l:'平均反应'},{v:hits+'/'+total,l:'命中轮次'},{v:acc+'%',l:'成功率'}]),200);
-            return;
-        }
-        round++; document.getElementById('rnd').textContent=round;
-        state='waiting';
-        zone.className='reaction-zone waiting'; zone.textContent='等待…';
-        info.textContent='绿灯亮起后立即点击！';
-        const delay=800+Math.random()*2500;
-        tid=setTimeout(()=>{
-            state='ready'; zone.className='reaction-zone ready'; zone.textContent='点击！';
-            tid=setTimeout(()=>{
-                state='late'; zone.className='reaction-zone early'; zone.textContent='太慢了';
-                info.textContent='超时，本轮未计分';
-                addTimeChip('超时','#555');
-                setTimeout(nextRound,900);
-            },1500);
-        },delay);
-    }
-    zone.onclick=()=>{
-        if(state==='idle'){ nextRound(); return; }
-        if(state==='waiting'){ clearTimeout(tid); state='early';
-            zone.className='reaction-zone early'; zone.textContent='太早了！';
-            info.textContent='还没亮灯就点了！本轮不计分';
-            addTimeChip('抢先','#e74c3c');
-            setTimeout(nextRound,900); return; }
-        if(state==='ready'){
-            clearTimeout(tid);
-            const reacted = parseInt(zone.dataset.t0)||0;
-            // approximate: use born time from setTimeout
-            // better: record when green showed
-            const ms = Math.round(200+Math.random()*300); // placeholder; real impl below
-            times.push(ms); hits++; state='hit';
-            zone.className='reaction-zone'; zone.style.background='rgba(0,200,255,0.25)';
-            zone.style.borderColor='var(--accent)'; zone.style.color='var(--accent)';
-            zone.textContent=ms+'ms';
-            document.getElementById('rhits').textContent=hits;
-            addTimeChip(ms+'ms', ms<300?'var(--green)':ms<450?'var(--gold)':'var(--red)');
-            setTimeout(()=>{ zone.style.background=''; zone.style.borderColor=''; zone.style.color=''; nextRound(); },700);
-        }
-    };
-    // Real timing
-    const origTimeout=window.setTimeout;
-    let _greenTime=0;
-    zone.onclick=(()=>{
-        const orig=zone.onclick;
-        return function(){
-            if(state==='ready'){
-                clearTimeout(tid);
-                const ms=Math.round(Date.now()-_greenTime);
-                times.push(ms); hits++; state='hit';
-                zone.className='reaction-zone'; zone.style.cssText='width:180px;height:180px;font-size:1.4rem;border:4px solid var(--accent);background:rgba(0,200,255,0.15);color:var(--accent);cursor:pointer;';
-                zone.textContent=ms+'ms';
-                document.getElementById('rhits').textContent=hits;
-                addTimeChip(ms+'ms', ms<250?'var(--green)':ms<380?'var(--gold)':'var(--red)');
-                setTimeout(()=>{ zone.style.cssText=''; nextRound(); },700);
-            } else { orig.call(this); }
-        };
-    })();
 
-    // patch ready state to record time
-    const origNext=nextRound;
-    function patchedReady(){
-        const origSetTimeout=setTimeout;
-        state='waiting'; zone.className='reaction-zone waiting'; zone.textContent='等待…';
-        const delay2=800+Math.random()*2500;
-        tid=origSetTimeout(()=>{
-            state='ready'; _greenTime=Date.now();
-            zone.className='reaction-zone ready'; zone.textContent='点击！';
-            tid=origSetTimeout(()=>{
-                if(state!=='ready') return;
-                state='late'; zone.className='reaction-zone early'; zone.textContent='超时';
-                addTimeChip('超时','#555');
-                setTimeout(origNext,900);
-            },1500);
-        },delay2);
-    }
-    // re-wire
-    zone.onclick=function(){
-        if(state==='idle'){ round=0; hits=0; times=[]; document.getElementById('rtimes').innerHTML='';
-            patchedReady(); document.getElementById('rnd').textContent=round+1; return; }
-        if(state==='waiting'){ clearTimeout(tid); state='early';
-            zone.className='reaction-zone early'; zone.textContent='太早了！';
-            addTimeChip('抢先','#e74c3c');
-            setTimeout(patchedReady,900); return; }
-        if(state==='ready'){
-            clearTimeout(tid);
-            const ms=Math.round(Date.now()-_greenTime);
-            times.push(ms); hits++; round++; state='hit';
-            zone.className='reaction-zone';
-            zone.style.cssText='width:180px;height:180px;font-size:1.4rem;border:4px solid var(--accent);background:rgba(0,200,255,0.15);color:var(--accent);cursor:pointer;border-radius:50%;display:flex;align-items:center;justify-content:center;';
-            zone.textContent=ms+'ms';
-            document.getElementById('rnd').textContent=round;
-            document.getElementById('rhits').textContent=hits;
-            addTimeChip(ms+'ms', ms<250?'var(--green)':ms<400?'var(--gold)':'var(--red)');
-            if(round>=total){
-                setTimeout(()=>{
-                    const avg=Math.round(times.reduce((a,b)=>a+b)/times.length);
-                    const earned=Math.min(50,hits*5);
-                    _mgReward(earned);
-                    const g=avg<220?'S+':avg<280?'S':avg<340?'A':avg<420?'B':avg<550?'C':'D';
-                    _showResult(body,g,avg<250?'反应神速！':avg<350?'反应良好':'继续训练',
-                        earned,[{v:avg+'ms',l:'平均反应'},{v:hits+'/'+total,l:'命中轮次'},{v:Math.round(hits/total*100)+'%',l:'成功率'}]);
-                },800);
-            } else {
-                setTimeout(()=>{ zone.style.cssText=''; patchedReady(); },700);
-            }
-        }
-    };
-
-    function addTimeChip(label,color){
-        const el=document.getElementById('rtimes');
-        if(!el) return;
+    function chip(label, color){
+        const el=document.getElementById('rtimes'); if(!el) return;
         const c=document.createElement('span');
         c.style.cssText=`padding:3px 9px;border-radius:12px;font-size:0.75rem;font-weight:600;background:${color}22;color:${color};border:1px solid ${color}55;`;
         c.textContent=label; el.appendChild(c);
     }
+
+    function finish(){
+        const avg=times.length?Math.round(times.reduce((a,b)=>a+b)/times.length):999;
+        const earned=Math.min(50,hits*5);
+        _mgReward(earned);
+        const g=avg<220?'S+':avg<280?'S':avg<340?'A':avg<420?'B':avg<550?'C':'D';
+        _showResult(body,g, avg<250?'反应神速！':avg<350?'反应良好':'继续训练',
+            earned,[{v:avg+'ms',l:'平均反应'},{v:hits+'/'+total,l:'命中轮次'},{v:Math.round(hits/total*100)+'%',l:'成功率'}]);
+    }
+
+    function nextRound(){
+        round++;
+        document.getElementById('rnd').textContent=round;
+        state='waiting';
+        zone.className='reaction-zone waiting'; zone.textContent='等待…'; zone.style.cssText='';
+        info.textContent='绿灯亮起后立即点击！';
+        const delay=800+Math.random()*2500;
+        tid=setTimeout(()=>{
+            state='ready'; _greenTime=Date.now();
+            zone.className='reaction-zone ready'; zone.textContent='点击！';
+            tid=setTimeout(()=>{
+                if(state!=='ready') return;
+                state='late'; zone.className='reaction-zone early'; zone.textContent='超时';
+                info.textContent='反应超时，本轮不计分';
+                chip('超时','#666');
+                setTimeout(nextRound, 900);
+            }, 1500);
+        }, delay);
+    }
+
+    zone.onclick=function(){
+        if(state==='idle'){
+            round=0; hits=0; times=[];
+            document.getElementById('rtimes').innerHTML='';
+            nextRound(); return;
+        }
+        if(state==='waiting'){
+            clearTimeout(tid); state='early';
+            zone.className='reaction-zone early'; zone.textContent='太早了！';
+            info.textContent='还没亮灯就点击，本轮不计分';
+            chip('抢先','#e74c3c');
+            setTimeout(nextRound, 900); return;
+        }
+        if(state==='ready'){
+            clearTimeout(tid);
+            const ms=Math.round(Date.now()-_greenTime);
+            times.push(ms); hits++; state='hit';
+            zone.style.cssText='width:180px;height:180px;font-size:1.4rem;border:4px solid var(--accent);background:rgba(0,200,255,0.15);color:var(--accent);cursor:pointer;border-radius:50%;display:flex;align-items:center;justify-content:center;user-select:none;';
+            zone.className='reaction-zone';
+            zone.textContent=ms+'ms';
+            info.textContent=ms<250?'⚡ 极速！':ms<380?'✅ 不错！':'继续加油';
+            document.getElementById('rhits').textContent=hits;
+            chip(ms+'ms', ms<250?'var(--green)':ms<400?'var(--gold)':'var(--red)');
+            if(round>=total) setTimeout(finish, 800);
+            else setTimeout(nextRound, 700);
+        }
+    };
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -2449,52 +2404,52 @@ function _startQuiz(body){
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  记忆翻牌
+//  记忆翻牌（重构版：DOM更新取代全量重渲，计时器稳定）
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 function _startMemory(body){
     const ICONS=['🔫','🎯','💣','🛡️','⚔️','🔩','🧨','🪖'];
     let cards=[...ICONS,...ICONS].sort(()=>Math.random()-0.5)
         .map((ic,i)=>({id:i,icon:ic,flipped:false,matched:false}));
-    let first=null,second=null,moves=0,matches=0,locked=false;
-    const total=ICONS.length;
-    let startTime=Date.now();
+    let first=null, second=null, moves=0, matches=0, locked=false;
+    const total=ICONS.length, startTime=Date.now();
 
-    function render(){
-        body.innerHTML=`
-          <div style="display:flex;justify-content:space-between;padding:10px 16px;border-bottom:1px solid var(--border);font-size:0.82rem;">
-            <span>步数：<b id="mem-moves">0</b></span>
-            <span>配对：<b id="mem-matched">0</b>/${total}</span>
-            <span>用时：<b id="mem-timer">0s</b></span>
-          </div>
-          <div style="flex:1;display:flex;align-items:center;justify-content:center;overflow:auto;">
-            <div class="memory-grid">
-              ${cards.map((c,i)=>`
-                <div class="mem-card ${c.matched?'matched':c.flipped?'flipped':'face-down'}"
-                     data-i="${i}" onclick="_memFlip(${i})" style="font-size:${c.flipped||c.matched?'1.8rem':'0'};">
-                  ${c.matched||c.flipped?c.icon:''}
-                </div>`).join('')}
-            </div>
-          </div>`;
-        // Timer
-        clearInterval(_mgTimerId);
-        _mgTimerId=setInterval(()=>{
-            const el=document.getElementById('mem-timer');
-            if(el) el.textContent=Math.round((Date.now()-startTime)/1000)+'s';
-        },500);
+    body.innerHTML=`
+      <div style="display:flex;justify-content:space-between;padding:10px 16px;border-bottom:1px solid var(--border);font-size:0.82rem;flex-shrink:0;">
+        <span>步数：<b id="mem-moves">0</b></span>
+        <span>配对：<b id="mem-matched">0</b>/${total}</span>
+        <span>用时：<b id="mem-timer">0s</b></span>
+      </div>
+      <div style="flex:1;display:flex;align-items:center;justify-content:center;overflow:auto;">
+        <div class="memory-grid" id="mem-grid"></div>
+      </div>`;
+
+    const grid=document.getElementById('mem-grid');
+    cards.forEach((c,i)=>{
+        const el=document.createElement('div');
+        el.className='mem-card face-down';
+        el.onclick=()=>flipCard(i);
+        grid.appendChild(el);
+    });
+
+    function setCard(i){
+        const c=cards[i], el=grid.children[i]; if(!el) return;
+        if(c.matched){ el.className='mem-card matched'; el.textContent=c.icon; }
+        else if(c.flipped){ el.className='mem-card flipped'; el.textContent=c.icon; }
+        else { el.className='mem-card face-down'; el.textContent=''; }
     }
 
-    window._memFlip=function(i){
+    function flipCard(i){
         if(locked||cards[i].flipped||cards[i].matched) return;
-        cards[i].flipped=true;
-        if(!first){ first=i; render(); return; }
+        cards[i].flipped=true; setCard(i);
+        SFX.click();
+        if(first===null){ first=i; return; }
         second=i; locked=true; moves++;
         document.getElementById('mem-moves').textContent=moves;
-        render();
         setTimeout(()=>{
             if(cards[first].icon===cards[second].icon){
                 cards[first].matched=cards[second].matched=true;
-                matches++;
-                document.getElementById('mem-matched').textContent=matches;
+                setCard(first); setCard(second);
+                matches++; document.getElementById('mem-matched').textContent=matches;
                 if(matches===total){
                     clearInterval(_mgTimerId);
                     const secs=Math.round((Date.now()-startTime)/1000);
@@ -2504,17 +2459,165 @@ function _startMemory(body){
                     setTimeout(()=>_showResult(body,g,moves<=total+3?'记忆达人！':'完成配对！',
                         earned,[{v:moves,l:'总步数'},{v:secs+'s',l:'用时'},{v:earned+'分',l:'积分奖励'}]),300);
                 }
-                first=null; second=null; locked=false; render();
             } else {
                 cards[first].flipped=cards[second].flipped=false;
-                first=null; second=null; locked=false; render();
+                setCard(first); setCard(second);
             }
-        },800);
-    };
-    render();
+            first=null; second=null; locked=false;
+        }, 800);
+    }
+
+    _mgTimerId=setInterval(()=>{
+        const el=document.getElementById('mem-timer');
+        if(el) el.textContent=Math.round((Date.now()-startTime)/1000)+'s';
+    }, 500);
 }
 
-// 旧的兼容函数（保留空壳防止报错）
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  数字搜寻（Schulte Table）
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function _startSchulte(body){
+    const N=5, total=N*N;
+    const nums=Array.from({length:total},(_,i)=>i+1).sort(()=>Math.random()-0.5);
+    let next=1, errors=0, startTime=null;
+
+    body.innerHTML=`
+      <div class="mg-hud">
+        <div class="mg-hud-item"><div class="mg-hud-val" id="sch-next" style="color:var(--gold);font-size:1.6rem;">1</div><div class="mg-hud-lbl">目标数字</div></div>
+        <div class="mg-hud-item"><div class="mg-hud-val" id="sch-time">--</div><div class="mg-hud-lbl">用时(秒)</div></div>
+        <div class="mg-hud-item"><div class="mg-hud-val" id="sch-err" style="color:var(--red);">0</div><div class="mg-hud-lbl">点错次数</div></div>
+        <div style="margin-left:auto;font-size:0.72rem;color:var(--text-dim);align-self:center;">按顺序点击 1 → ${total} · 点错不扣时</div>
+      </div>
+      <div style="flex:1;display:flex;align-items:center;justify-content:center;overflow:auto;padding:8px;">
+        <div id="sch-grid" style="display:grid;grid-template-columns:repeat(${N},1fr);gap:6px;width:min(360px,90vw);"></div>
+      </div>`;
+
+    const grid=document.getElementById('sch-grid');
+    nums.forEach((n,i)=>{
+        const btn=document.createElement('button');
+        btn.style.cssText='aspect-ratio:1;border-radius:8px;font-size:1.1rem;font-weight:700;background:var(--bg-panel);border:2px solid var(--border);color:var(--text);cursor:pointer;transition:all 0.12s;';
+        btn.textContent=n;
+        btn.onclick=()=>{
+            if(btn.disabled) return;
+            if(!startTime){ startTime=Date.now(); }
+            if(n===next){
+                btn.disabled=true;
+                btn.style.background='rgba(46,204,113,0.25)';
+                btn.style.borderColor='var(--green)';
+                btn.style.color='var(--green)';
+                SFX.click();
+                next++;
+                const ne=document.getElementById('sch-next');
+                if(ne) ne.textContent=next<=total?next:'✓';
+                if(next>total){
+                    clearInterval(_mgTimerId);
+                    const secs=(Date.now()-startTime)/1000;
+                    const earned=Math.max(5,Math.min(45,Math.floor(Math.max(0,90-secs)*0.55))-errors*2);
+                    _mgReward(earned);
+                    const g=secs<25?'S+':secs<40?'S':secs<60?'A':secs<90?'B':'C';
+                    setTimeout(()=>_showResult(body,g,
+                        secs<30?'搜索达人！':secs<55?'反应良好':'继续练习',
+                        earned,[{v:secs.toFixed(1)+'s',l:'完成时间'},{v:errors,l:'点错次数'},{v:earned+'分',l:'积分奖励'}]),400);
+                }
+            } else {
+                errors++;
+                const ee=document.getElementById('sch-err'); if(ee) ee.textContent=errors;
+                btn.style.background='rgba(231,76,60,0.3)';
+                btn.style.borderColor='var(--red)';
+                btn.style.transform='scale(0.93)';
+                setTimeout(()=>{
+                    btn.style.background='var(--bg-panel)';
+                    btn.style.borderColor='var(--border)';
+                    btn.style.transform='';
+                },250);
+            }
+        };
+        grid.appendChild(btn);
+    });
+
+    _mgTimerId=setInterval(()=>{
+        if(!startTime) return;
+        const el=document.getElementById('sch-time');
+        if(el) el.textContent=((Date.now()-startTime)/1000).toFixed(1);
+    }, 100);
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  数字搜寻（Schulte Table 变体）
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function _startSchulte(body){
+    const N=5, total=N*N;
+    let nums=Array.from({length:total},(_,i)=>i+1).sort(()=>Math.random()-0.5);
+    let next=1, errors=0, startTime=null;
+
+    body.innerHTML=`
+      <div class="mg-hud">
+        <div class="mg-hud-item"><div class="mg-hud-val" id="sch-next" style="color:var(--gold);font-size:1.6rem;">1</div><div class="mg-hud-lbl">目标数字</div></div>
+        <div class="mg-hud-item"><div class="mg-hud-val" id="sch-time">--</div><div class="mg-hud-lbl">用时(秒)</div></div>
+        <div class="mg-hud-item"><div class="mg-hud-val" id="sch-err" style="color:var(--red);">0</div><div class="mg-hud-lbl">点错次数</div></div>
+        <div style="margin-left:auto;font-size:0.72rem;color:var(--text-dim);align-self:center;">按顺序点击 1 → ${total}</div>
+      </div>
+      <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:12px;">
+        <div id="sch-grid" style="display:grid;grid-template-columns:repeat(${N},1fr);gap:6px;width:min(360px,100%);"></div>
+      </div>`;
+
+    const grid=document.getElementById('sch-grid');
+
+    function buildGrid(){
+        grid.innerHTML='';
+        nums.forEach((n,i)=>{
+            const btn=document.createElement('button');
+            btn.style.cssText='aspect-ratio:1;border-radius:8px;font-size:1.15rem;font-weight:700;background:var(--bg-panel);border:1.5px solid var(--border);color:var(--text);cursor:pointer;transition:all 0.12s;display:flex;align-items:center;justify-content:center;';
+            btn.textContent=n;
+            btn.dataset.n=n;
+            btn.onclick=()=>pick(btn,n);
+            grid.appendChild(btn);
+        });
+    }
+
+    function pick(btn, n){
+        if(!startTime) startTime=Date.now();
+        if(n===next){
+            SFX.click();
+            btn.style.background='rgba(46,204,113,0.25)';
+            btn.style.borderColor='var(--green)';
+            btn.style.color='var(--green)';
+            btn.disabled=true;
+            next++;
+            const ne=document.getElementById('sch-next');
+            if(ne) ne.textContent=next<=total?next:'✓';
+            if(next>total){
+                clearInterval(_mgTimerId);
+                const secs=(Date.now()-startTime)/1000;
+                const earned=Math.max(0,Math.min(45,Math.round((70-secs)*0.7+Math.max(0,5-errors)*4)));
+                _mgReward(earned);
+                const g=secs<25?'S+':secs<38?'S':secs<55?'A':secs<80?'B':'C';
+                setTimeout(()=>_showResult(body,g,
+                    secs<30?'专注达人！':secs<50?'反应不错！':'继续练习',
+                    earned,[{v:secs.toFixed(1)+'s',l:'完成时间'},{v:errors,l:'点错次数'},{v:earned+'分',l:'积分奖励'}]),400);
+            }
+        } else {
+            errors++;
+            SFX.empty();
+            const ee=document.getElementById('sch-err');
+            if(ee) ee.textContent=errors;
+            btn.style.background='rgba(231,76,60,0.3)';
+            btn.style.borderColor='var(--red)';
+            setTimeout(()=>{
+                if(!btn.disabled){ btn.style.background='var(--bg-panel)'; btn.style.borderColor='var(--border)'; }
+            },300);
+        }
+    }
+
+    buildGrid();
+    _mgTimerId=setInterval(()=>{
+        if(!startTime) return;
+        const el=document.getElementById('sch-time');
+        if(el) el.textContent=((Date.now()-startTime)/1000).toFixed(1);
+    },100);
+}
+
+// 兼容存根（防止报错）
 window.startReactionGame=function(){};
 window.quizAns=function(){};
 
@@ -2899,8 +3002,9 @@ function updateAmmoHUD(){
 function shoot(){
     const now = performance.now();
     if(now - lastShot < curWeapon.rate*1000) return;
-    if(ammo === 0){ showToast('弹药耗尽！'); return; }
+    if(ammo === 0){ SFX.empty(); showToast('弹药耗尽！按R换弹'); return; }
     lastShot = now;
+    SFX.shoot();
     if(ammo > 0) ammo--;
     updateAmmoHUD();
 
@@ -2959,6 +3063,7 @@ function spawnTracer(endPt){
 }
 
 function showHitMarker(){
+    SFX.hit();
     const ch = document.querySelector('.crosshair');
     if(!ch) return;
     ch.style.filter='drop-shadow(0 0 4px #e74c3c)';
@@ -2976,6 +3081,7 @@ function onDamage(data){
 }
 
 function onDeath(data){
+    SFX.death();
     gameState.respawning = true;
     gameState.respawnCountdown = 5;
     document.getElementById('death-screen').style.display='flex';
@@ -2997,6 +3103,7 @@ function onKillFeed(data){
     addKillFeedEntry(data);
     if(data.killerId === me.playerId){
         gameState.kills++;
+        SFX.kill();
         showAnnounce(`击杀 ${data.victimName}！ +10 分`);
     }
 }
@@ -3086,7 +3193,7 @@ function onGameEnd(data){
     });
 
     document.getElementById('end-screen').style.display='flex';
-    renderMiniLeaderboard(data.leaderboard);
+    setTimeout(sbLoadLeaderboard, 1000);
 }
 
 function backToLobby(){
@@ -3162,6 +3269,7 @@ document.addEventListener('keyup',e=>{
 
 function reloadWeapon(){
     if(ammoRes<=0 || ammo===curWeapon.ammo) return;
+    SFX.reload();
     showAnnounce('换弹中…');
     setTimeout(()=>{
         const need = curWeapon.ammo - ammo;
@@ -3193,6 +3301,56 @@ function showAnnounce(msg){
     el.textContent = msg; el.classList.add('show');
     setTimeout(()=>el.classList.remove('show'), 2200);
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  音效系统（Web Audio API · 程序生成，无需音频文件）
+// ─────────────────────────────────────────────────────────────────────────────
+const SFX = (()=>{
+    let _ac = null;
+    function ac(){ return _ac || (_ac = new (window.AudioContext||window.webkitAudioContext)()); }
+
+    function noise(dur, vol=0.3, falloff=12){
+        try{
+            const ctx=ac(), frames=Math.floor(ctx.sampleRate*dur);
+            const buf=ctx.createBuffer(1,frames,ctx.sampleRate);
+            const d=buf.getChannelData(0);
+            for(let i=0;i<frames;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/frames,falloff);
+            const src=ctx.createBufferSource(), gain=ctx.createGain();
+            gain.gain.value=vol; src.buffer=buf;
+            src.connect(gain); gain.connect(ctx.destination); src.start();
+        }catch(e){}
+    }
+
+    function tone(freq, dur, vol=0.2, type='sine', freqEnd=null){
+        try{
+            const ctx=ac(), osc=ctx.createOscillator(), gain=ctx.createGain();
+            osc.type=type; osc.frequency.setValueAtTime(freq, ctx.currentTime);
+            if(freqEnd) osc.frequency.exponentialRampToValueAtTime(freqEnd, ctx.currentTime+dur);
+            gain.gain.setValueAtTime(vol, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+dur);
+            osc.connect(gain); gain.connect(ctx.destination);
+            osc.start(); osc.stop(ctx.currentTime+dur);
+        }catch(e){}
+    }
+
+    return {
+        shoot(){ noise(0.09,0.38,14); tone(160,0.09,0.12,'sawtooth',70); },
+        hit(){ tone(1100,0.06,0.18,'square',550); },
+        kill(){
+            tone(650,0.06,0.15);
+            setTimeout(()=>tone(900,0.06,0.15),65);
+            setTimeout(()=>tone(720,0.1,0.14),130);
+        },
+        death(){ tone(380,0.55,0.2,'sawtooth',55); },
+        empty(){ tone(190,0.04,0.14,'square'); },
+        reload(){
+            tone(420,0.05,0.1,'square');
+            setTimeout(()=>tone(640,0.08,0.12,'square'),130);
+        },
+        aim_hit(){ tone(820,0.05,0.18,'sine',500); },
+        click(){ tone(600,0.04,0.1,'sine'); },
+    };
+})();
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  工具
@@ -3515,7 +3673,15 @@ function switchForumTab(tab, el){
     document.getElementById('forum-input').placeholder = tab==='forum'
         ? '分享你的想法… 世界论坛所有人可见'
         : '分享朋友圈动态… 仅好友可见';
-    loadForumPosts('forum', 'forum-posts');
+    if(tab === 'forum'){
+        loadForumPosts('forum', 'forum-posts');
+    } else {
+        const friendIds = _friendsList.map(f=>f.id);
+        friendIds.push(me.playerId);
+        _sb.from('bf_posts').select('*').eq('post_type','moments').in('author_id', friendIds)
+           .order('created_at',{ascending:false}).limit(50)
+           .then(({data})=> renderPosts(data||[], 'forum-posts', 'moments'));
+    }
 }
 
 async function loadForumPosts(type, containerId){
