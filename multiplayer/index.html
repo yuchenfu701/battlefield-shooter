@@ -2647,6 +2647,38 @@ let ammo = curWeapon.ammo;
 let ammoRes = curWeapon.res;
 let lastShot = 0;
 
+// ── 地图主题（4种，按 mapSeed % 4 选取）──────────────────────────────────────
+const MAP_THEMES = [
+    { wall:0x546070, ground:0x3d5030, sky:0x87ceeb, fog:0x87ceeb, fogN:25, fogF:100,
+      sun:0xfff0d8, sunI:1.4, amb:0x405060, ambI:0.7, crate:0x7a5820, mm:'#3a4a55' }, // 城市
+    { wall:0xb08050, ground:0xb08840, sky:0xd8c070, fog:0xd0b458, fogN:20, fogF:90,
+      sun:0xffcc88, sunI:1.7, amb:0x604028, ambI:0.5, crate:0xa06028, mm:'#907040' }, // 沙漠
+    { wall:0x3a5428, ground:0x243818, sky:0x6a8868, fog:0x608060, fogN:15, fogF:70,
+      sun:0xfff8e8, sunI:1.0, amb:0x1e3818, ambI:0.7, crate:0x405020, mm:'#3a5428' }, // 丛林
+    { wall:0x1e2d40, ground:0x101820, sky:0x0a1018, fog:0x0a1018, fogN:10, fogF:55,
+      sun:0x8090b8, sunI:0.4, amb:0x0c1420, ambI:0.5, crate:0x1a2030, mm:'#1e2d40' }, // 夜战
+];
+// ── 共享玩家几何体（所有玩家复用，避免每次 new BoxGeometry）──────────────────
+const PLAYER_GEOS = {
+    body: new THREE.BoxGeometry(0.5,0.7,0.28),
+    head: new THREE.BoxGeometry(0.3,0.3,0.3),
+    leg:  new THREE.BoxGeometry(0.22,0.5,0.22),
+    arm:  new THREE.BoxGeometry(0.16,0.5,0.16),
+    gun:  new THREE.BoxGeometry(0.06,0.1,0.6),
+};
+const TEAM_MATS = [0xe74c3c,0x3498db,0x2ecc71,0xf39c12].map(c=>new THREE.MeshLambertMaterial({color:c}));
+const SKIN_MAT  = new THREE.MeshLambertMaterial({color:0xc8a878});
+const DARK_MAT  = new THREE.MeshLambertMaterial({color:0x222222});
+const GUN_MAT   = new THREE.MeshLambertMaterial({color:0x1a1a1a});
+// ── 弹道 & 枪口火焰对象池（避免每帧 new Mesh / new Geometry）─────────────────
+const _TRACER_GEO = new THREE.CylinderGeometry(0.006,0.006,1,4);
+const _TRACER_MAT = new THREE.MeshBasicMaterial({color:0xffee88,transparent:true,opacity:0.85});
+const _tracerPool = [], _muzzlePool = [];
+const _tracerUp = new THREE.Vector3(0,1,0);
+const _tracerDir = new THREE.Vector3();
+// ── 小地图静态缓存（buildMap后预渲染一次，每帧只画玩家）─────────────────────
+let _minimapCache = null;
+
 function initGame(matchData){
     // 复用或新建渲染器
     const canvas = document.getElementById('game-canvas');
@@ -2658,26 +2690,28 @@ function initGame(matchData){
     gRenderer.setSize(window.innerWidth, window.innerHeight);
     gRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
+    const _theme = MAP_THEMES[matchData.mapSeed % MAP_THEMES.length];
+
     gScene  = new THREE.Scene();
-    gScene.background = new THREE.Color(0x87ceeb);
-    gScene.fog = new THREE.Fog(0x87ceeb, 30, 120);
+    gScene.background = new THREE.Color(_theme.sky);
+    gScene.fog = new THREE.Fog(_theme.fog, _theme.fogN, _theme.fogF);
 
     gCamera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.1, 200);
     gClock  = new THREE.Clock();
 
-    // 灯光
-    const sun = new THREE.DirectionalLight(0xfff0d8, 1.4);
+    // 灯光（随主题变化）
+    const sun = new THREE.DirectionalLight(_theme.sun, _theme.sunI);
     sun.position.set(30, 60, 20);
     sun.castShadow = true;
-    sun.shadow.mapSize.set(2048,2048);
+    sun.shadow.mapSize.set(1024,1024);
     sun.shadow.camera.near = 1; sun.shadow.camera.far = 200;
     sun.shadow.camera.left = -80; sun.shadow.camera.right = 80;
     sun.shadow.camera.top  =  80; sun.shadow.camera.bottom= -80;
     gScene.add(sun);
-    gScene.add(new THREE.AmbientLight(0x405060, 0.7));
+    gScene.add(new THREE.AmbientLight(_theme.amb, _theme.ambI));
 
     // 地图
-    buildMap(matchData.mapSeed);
+    buildMap(matchData.mapSeed, _theme);
 
     // 我的角色
     const myData = gameState.players[me.playerId];
@@ -2706,11 +2740,11 @@ function initGame(matchData){
 }
 
 // ─── 地图构建 ────────────────────────────────────────────────────────────────
-function buildMap(seed){
+function buildMap(seed, theme){
     // 地面
     const ground = new THREE.Mesh(
         new THREE.PlaneGeometry(MAP_G*CELL, MAP_G*CELL),
-        new THREE.MeshLambertMaterial({ color: 0x5a7040 })
+        new THREE.MeshLambertMaterial({ color: theme.ground })
     );
     ground.rotation.x = -Math.PI/2;
     ground.position.set(MAP_G*CELL/2, 0, MAP_G*CELL/2);
@@ -2718,7 +2752,7 @@ function buildMap(seed){
     gScene.add(ground);
     gMap.walls = [];
 
-    // 迷宫墙壁（简化版，使用 seed 随机）
+    // 迷宫生成（递归分割）
     const rng = mulberry32(seed);
     const grid = Array.from({length:MAP_G},()=>new Uint8Array(MAP_G));
 
@@ -2751,19 +2785,66 @@ function buildMap(seed){
                 grid[x][z]=0;
     });
 
-    // 合并相邻墙壁（简化：逐格生成）
-    const wallMat = new THREE.MeshLambertMaterial({ color: 0x4a5560 });
+    // ─ InstancedMesh：全部墙体 1 次 DrawCall（原来每格一个 Mesh，数百次 DrawCall）
+    let wallCount=0;
+    for(let x=0;x<MAP_G;x++) for(let z=0;z<MAP_G;z++) if(grid[x][z]) wallCount++;
+
     const wallGeo = new THREE.BoxGeometry(CELL, 3.2, CELL);
+    const wallMat = new THREE.MeshLambertMaterial({ color: theme.wall });
+    const wallMesh = new THREE.InstancedMesh(wallGeo, wallMat, wallCount);
+    wallMesh.receiveShadow = true;
+    const _dummy = new THREE.Object3D();
+    let wIdx=0;
     for(let x=0;x<MAP_G;x++){
         for(let z=0;z<MAP_G;z++){
             if(!grid[x][z]) continue;
-            const m = new THREE.Mesh(wallGeo, wallMat);
-            m.position.set(x*CELL+CELL/2, 1.6, z*CELL+CELL/2);
-            m.castShadow = m.receiveShadow = true;
-            gScene.add(m);
+            _dummy.position.set(x*CELL+CELL/2, 1.6, z*CELL+CELL/2);
+            _dummy.rotation.set(0,0,0);
+            _dummy.updateMatrix();
+            wallMesh.setMatrixAt(wIdx++, _dummy.matrix);
             gMap.walls.push({ x:x*CELL, z:z*CELL, size:CELL });
         }
     }
+    wallMesh.instanceMatrix.needsUpdate = true;
+    gScene.add(wallMesh);
+
+    // ─ 散布掩体箱（标记为实心格，玩家可碰撞；同样用 InstancedMesh）
+    const SPAWN_SAFE=[{x:0,z:0},{x:MAP_G-margin,z:0},{x:0,z:MAP_G-margin},{x:MAP_G-margin,z:MAP_G-margin}];
+    const cratePos=[];
+    let tries=0;
+    while(cratePos.length<22 && tries<500){
+        tries++;
+        const cx=4+Math.floor(rng()*(MAP_G-8));
+        const cz=4+Math.floor(rng()*(MAP_G-8));
+        if(grid[cx][cz]) continue;
+        if(SPAWN_SAFE.some(s=>cx>=s.x&&cx<s.x+margin&&cz>=s.z&&cz<s.z+margin)) continue;
+        // 至多2个相邻墙格，避免堵死走廊
+        const adj=[[1,0],[-1,0],[0,1],[0,-1]].filter(([dx,dz])=>{
+            const nx=cx+dx, nz=cz+dz;
+            return nx>=0&&nx<MAP_G&&nz>=0&&nz<MAP_G&&grid[nx][nz];
+        }).length;
+        if(adj>2) continue;
+        grid[cx][cz]=1;
+        cratePos.push({cx,cz,r:rng()*Math.PI*0.5});
+    }
+    if(cratePos.length){
+        const crateGeo=new THREE.BoxGeometry(2.2,0.9,2.2);
+        const crateMat=new THREE.MeshLambertMaterial({color:theme.crate});
+        const crateMesh=new THREE.InstancedMesh(crateGeo,crateMat,cratePos.length);
+        crateMesh.castShadow=true; crateMesh.receiveShadow=true;
+        cratePos.forEach(({cx,cz,r},i)=>{
+            _dummy.position.set(cx*CELL+CELL/2, 0.45, cz*CELL+CELL/2);
+            _dummy.rotation.set(0,r,0);
+            _dummy.updateMatrix();
+            crateMesh.setMatrixAt(i,_dummy.matrix);
+            gMap.walls.push({x:cx*CELL,z:cz*CELL,size:CELL});
+        });
+        crateMesh.instanceMatrix.needsUpdate=true;
+        gScene.add(crateMesh);
+    }
+
+    // 小地图静态层预渲染
+    _buildMinimapCache(theme);
 }
 
 function mulberry32(seed){
@@ -2771,37 +2852,35 @@ function mulberry32(seed){
     return function(){s+=0x6D2B79F5;let t=s;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return((t^(t>>>14))>>>0)/4294967296;};
 }
 
-// ─── 其他玩家模型（人形简化） ────────────────────────────────────────────────
+// ─── 小地图静态预缓存（buildMap后调用一次，之后每帧只 drawImage）────────────
+function _buildMinimapCache(theme){
+    const cv = document.getElementById('minimap-canvas');
+    if(!cv) return;
+    const W=cv.width, H=cv.height;
+    const off=document.createElement('canvas');
+    off.width=W; off.height=H;
+    const ctx=off.getContext('2d');
+    ctx.fillStyle='rgba(0,0,0,0.72)'; ctx.fillRect(0,0,W,H);
+    const scale=W/(MAP_G*CELL);
+    ctx.fillStyle=theme?.mm||'#3a4a55';
+    for(let x=0;x<MAP_G;x++) for(let z=0;z<MAP_G;z++){
+        if(gMap.grid[x]&&gMap.grid[x][z]) ctx.fillRect(x*CELL*scale,z*CELL*scale,CELL*scale+1,CELL*scale+1);
+    }
+    _minimapCache=off;
+}
+
+// ─── 其他玩家模型（共享几何体，所有实例复用同一套 BoxGeometry）───────────────
 function spawnOtherPlayer(sid, data){
-    const teamColors = [0xe74c3c, 0x3498db, 0x2ecc71, 0xf39c12];
-    const color = teamColors[data.teamIdx] || 0x888888;
+    const tMat = TEAM_MATS[data.teamIdx] || TEAM_MATS[0];
     const g = new THREE.Group();
-
-    // 身体
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.5,0.7,0.28), new THREE.MeshLambertMaterial({color}));
-    body.position.y = 0.35; g.add(body);
-    // 头部
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.3,0.3,0.3), new THREE.MeshLambertMaterial({color:0xc8a878}));
-    head.position.y = 0.85; g.add(head);
-    // 腿
-    [-0.12,0.12].forEach(xo=>{
-        const leg = new THREE.Mesh(new THREE.BoxGeometry(0.22,0.5,0.22), new THREE.MeshLambertMaterial({color:0x222222}));
-        leg.position.set(xo,-0.25,0); g.add(leg);
-    });
-    // 手臂
-    [-0.35,0.35].forEach(xo=>{
-        const arm = new THREE.Mesh(new THREE.BoxGeometry(0.16,0.5,0.16), new THREE.MeshLambertMaterial({color}));
-        arm.position.set(xo,0.15,0); g.add(arm);
-    });
-    // 武器（简化）
-    const gun = new THREE.Mesh(new THREE.BoxGeometry(0.06,0.1,0.6), new THREE.MeshLambertMaterial({color:0x1a1a1a}));
-    gun.position.set(0.35,0.25,-0.2); g.add(gun);
-
+    const body=new THREE.Mesh(PLAYER_GEOS.body, tMat); body.position.y=0.35; g.add(body);
+    const head=new THREE.Mesh(PLAYER_GEOS.head, SKIN_MAT); head.position.y=0.85; g.add(head);
+    [-0.12,0.12].forEach(xo=>{ const leg=new THREE.Mesh(PLAYER_GEOS.leg,DARK_MAT); leg.position.set(xo,-0.25,0); g.add(leg); });
+    [-0.35,0.35].forEach(xo=>{ const arm=new THREE.Mesh(PLAYER_GEOS.arm,tMat); arm.position.set(xo,0.15,0); g.add(arm); });
+    const gun=new THREE.Mesh(PLAYER_GEOS.gun,GUN_MAT); gun.position.set(0.35,0.25,-0.2); g.add(gun);
     g.position.set(data.pos.x, data.pos.y, data.pos.z);
-    g.castShadow = true;
     gScene.add(g);
-
-    gOtherPlayers[sid] = { mesh: g, hp: data.hp, teamIdx: data.teamIdx, alive: data.alive };
+    gOtherPlayers[sid]={mesh:g, hp:data.hp, teamIdx:data.teamIdx, alive:data.alive};
 }
 
 // ─── 游戏主循环 ──────────────────────────────────────────────────────────────
@@ -2896,39 +2975,31 @@ function wallAt(wx, wz){
     return gMap.grid[gx] && gMap.grid[gx][gz]===1;
 }
 
-// ─── 小地图 ──────────────────────────────────────────────────────────────────
+// ─── 小地图（墙体已预缓存，每帧只画动态元素）───────────────────────────────
 function drawMinimap(){
     const cv = document.getElementById('minimap-canvas');
     const ctx = cv.getContext('2d');
     const W=cv.width, H=cv.height;
-    ctx.clearRect(0,0,W,H);
-    ctx.fillStyle='rgba(0,0,0,0.7)'; ctx.fillRect(0,0,W,H);
+    // 静态底图（背景+墙壁）：一次 drawImage 替代 1600 次 fillRect
+    if(_minimapCache) ctx.drawImage(_minimapCache,0,0);
+    else { ctx.fillStyle='rgba(0,0,0,0.72)'; ctx.fillRect(0,0,W,H); }
 
-    const scale = W / (MAP_G*CELL);
-    // 墙
-    ctx.fillStyle='#3a4a55';
-    for(let x=0;x<MAP_G;x++) for(let z=0;z<MAP_G;z++){
-        if(gMap.grid[x]&&gMap.grid[x][z]){ ctx.fillRect(x*CELL*scale,z*CELL*scale,CELL*scale+1,CELL*scale+1); }
-    }
-
+    const scale=W/(MAP_G*CELL);
     const teamColors=['#e74c3c','#3498db','#2ecc71','#f39c12'];
     // 其他玩家
-    for(const [sid,p] of Object.entries(gOtherPlayers)){
+    for(const [,p] of Object.entries(gOtherPlayers)){
         if(!p.alive) continue;
-        ctx.fillStyle = teamColors[p.teamIdx]||'#fff';
+        ctx.fillStyle=teamColors[p.teamIdx]||'#fff';
         ctx.beginPath();
-        ctx.arc(p.mesh.position.x*scale, p.mesh.position.z*scale, 2.5, 0, 6.28);
+        ctx.arc(p.mesh.position.x*scale,p.mesh.position.z*scale,2.5,0,6.28);
         ctx.fill();
     }
-    // 自己
+    // 自己（白点+方向三角）
+    const px=gCamera.position.x*scale, pz=gCamera.position.z*scale;
     ctx.fillStyle='#fff';
-    ctx.beginPath();
-    ctx.arc(gCamera.position.x*scale, gCamera.position.z*scale, 3.5, 0, 6.28);
-    ctx.fill();
-    // 方向三角
+    ctx.beginPath(); ctx.arc(px,pz,3.5,0,6.28); ctx.fill();
     ctx.save();
-    ctx.translate(gCamera.position.x*scale, gCamera.position.z*scale);
-    ctx.rotate(gYaw+Math.PI);
+    ctx.translate(px,pz); ctx.rotate(gYaw+Math.PI);
     ctx.fillStyle='rgba(255,255,255,0.9)';
     ctx.beginPath(); ctx.moveTo(0,-5); ctx.lineTo(3,2); ctx.lineTo(-3,2); ctx.closePath(); ctx.fill();
     ctx.restore();
@@ -3042,24 +3113,33 @@ function shoot(){
 }
 
 function spawnMuzzleFlash(){
-    const light = new THREE.PointLight(0xffaa44, 8, 3);
-    light.position.copy(gCamera.position).addScaledVector(new THREE.Vector3(-Math.sin(gYaw)*0.3,0.1,-Math.cos(gYaw)*0.3),1);
+    // 对象池：复用 PointLight，避免每次 new
+    const light = _muzzlePool.pop() || new THREE.PointLight(0xffaa44,8,3);
+    light.intensity=8;
+    light.position.set(
+        gCamera.position.x - Math.sin(gYaw)*0.3,
+        gCamera.position.y + 0.1,
+        gCamera.position.z - Math.cos(gYaw)*0.3
+    );
     gScene.add(light);
-    setTimeout(()=>gScene.remove(light), 60);
+    setTimeout(()=>{ gScene.remove(light); _muzzlePool.push(light); }, 60);
 }
 
 function spawnTracer(endPt){
-    const startPt = gCamera.position.clone().addScaledVector(new THREE.Vector3(-Math.sin(gYaw),0,-Math.cos(gYaw)),0.3);
-    const dir = endPt.clone().sub(startPt);
-    const len = dir.length();
-    const m = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.006,0.006,len,4),
-        new THREE.MeshBasicMaterial({color:0xffee88,transparent:true,opacity:0.85})
-    );
-    m.position.copy(startPt).addScaledVector(dir.normalize(),len/2);
-    m.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), dir.clone().normalize());
+    // 对象池：共享几何体，缩放 Y 轴适配长度，避免每次 new Geometry
+    const sx=gCamera.position.x - Math.sin(gYaw)*0.3;
+    const sy=gCamera.position.y;
+    const sz=gCamera.position.z - Math.cos(gYaw)*0.3;
+    _tracerDir.set(endPt.x-sx, endPt.y-sy, endPt.z-sz);
+    const len=_tracerDir.length();
+    if(len<0.01) return;
+    _tracerDir.divideScalar(len);
+    const m = _tracerPool.pop() || new THREE.Mesh(_TRACER_GEO, _TRACER_MAT);
+    m.scale.set(1, len, 1);
+    m.position.set(sx+_tracerDir.x*len*0.5, sy+_tracerDir.y*len*0.5, sz+_tracerDir.z*len*0.5);
+    m.quaternion.setFromUnitVectors(_tracerUp, _tracerDir);
     gScene.add(m);
-    setTimeout(()=>gScene.remove(m), 120);
+    setTimeout(()=>{ gScene.remove(m); _tracerPool.push(m); }, 120);
 }
 
 function showHitMarker(){
