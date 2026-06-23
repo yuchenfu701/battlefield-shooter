@@ -2656,7 +2656,7 @@ const MAP_THEMES = [
     { wall:0x3a5428, ground:0x243818, sky:0x6a8868, fog:0x608060, fogN:15, fogF:70,
       sun:0xfff8e8, sunI:1.0, amb:0x1e3818, ambI:0.7, crate:0x405020, mm:'#3a5428' }, // 丛林
     { wall:0x1e2d40, ground:0x101820, sky:0x0a1018, fog:0x0a1018, fogN:10, fogF:55,
-      sun:0x8090b8, sunI:0.4, amb:0x0c1420, ambI:0.5, crate:0x1a2030, mm:'#1e2d40' }, // 夜战
+      sun:0x8090b8, sunI:0.4, amb:0x0c1420, ambI:0.5, crate:0x1a2030, mm:'#1e2d40', hasLights:true }, // 夜战
 ];
 // ── 共享玩家几何体（所有玩家复用，避免每次 new BoxGeometry）──────────────────
 const PLAYER_GEOS = {
@@ -2678,6 +2678,10 @@ const _tracerUp = new THREE.Vector3(0,1,0);
 const _tracerDir = new THREE.Vector3();
 // ── 小地图静态缓存（buildMap后预渲染一次，每帧只画玩家）─────────────────────
 let _minimapCache = null;
+// ── 射线检测单例（避免每次 new Raycaster / new Vector2）────────────────────
+const _rc = new THREE.Raycaster();
+const _rcCtr = new THREE.Vector2(0,0);
+const _rcEnd = new THREE.Vector3();
 
 function initGame(matchData){
     // 复用或新建渲染器
@@ -2739,12 +2743,65 @@ function initGame(matchData){
     gameLoop();
 }
 
+// ─── 程序化纹理（Canvas生成，无需图片文件）──────────────────────────────────
+function _mkWallTex(hex){
+    const W=128,H=128,cv=document.createElement('canvas');
+    cv.width=W; cv.height=H;
+    const ctx=cv.getContext('2d');
+    const r=(hex>>16)&255,g=(hex>>8)&255,b=hex&255;
+    // 底色
+    ctx.fillStyle=`rgb(${r},${g},${b})`; ctx.fillRect(0,0,W,H);
+    // 砖块图案（4列×8行，隔行偏移）
+    const BW=32,BH=16;
+    for(let row=0;row<8;row++){
+        for(let col=-1;col<5;col++){
+            const x=(row%2===0?col:col-0.5)*BW, y=row*BH;
+            const sv=(Math.sin(col*7.3+row*5.1)*9)|0;
+            ctx.fillStyle=`rgb(${Math.max(0,Math.min(255,r+sv))},${Math.max(0,Math.min(255,g+sv))},${Math.max(0,Math.min(255,b+sv))})`;
+            ctx.fillRect(x+1,y+1,BW-2,BH-2);
+        }
+    }
+    // 灰缝
+    ctx.strokeStyle='rgba(0,0,0,0.30)'; ctx.lineWidth=2;
+    for(let row=0;row<=8;row++){ctx.beginPath();ctx.moveTo(0,row*BH);ctx.lineTo(W,row*BH);ctx.stroke();}
+    for(let row=0;row<8;row++){
+        const off=row%2===0?0:BW/2;
+        for(let col=0;col<=5;col++){const x=col*BW-BW+off;ctx.beginPath();ctx.moveTo(x,row*BH);ctx.lineTo(x,(row+1)*BH);ctx.stroke();}
+    }
+    const t=new THREE.CanvasTexture(cv);
+    t.wrapS=t.wrapT=THREE.RepeatWrapping;
+    return t;
+}
+
+function _mkGroundTex(hex){
+    const W=128,H=128,cv=document.createElement('canvas');
+    cv.width=W; cv.height=H;
+    const ctx=cv.getContext('2d');
+    const r=(hex>>16)&255,g=(hex>>8)&255,b=hex&255;
+    // 棋盘砖格
+    for(let i=0;i<4;i++) for(let j=0;j<4;j++){
+        const sv=(i+j)%2===0?-10:8;
+        ctx.fillStyle=`rgb(${Math.max(0,Math.min(255,r+sv))},${Math.max(0,Math.min(255,g+sv))},${Math.max(0,Math.min(255,b+sv))})`;
+        ctx.fillRect(i*32,j*32,32,32);
+    }
+    // 接缝
+    ctx.strokeStyle='rgba(0,0,0,0.18)'; ctx.lineWidth=1;
+    for(let i=0;i<=4;i++){
+        ctx.beginPath();ctx.moveTo(i*32,0);ctx.lineTo(i*32,H);ctx.stroke();
+        ctx.beginPath();ctx.moveTo(0,i*32);ctx.lineTo(W,i*32);ctx.stroke();
+    }
+    const t=new THREE.CanvasTexture(cv);
+    t.wrapS=t.wrapT=THREE.RepeatWrapping;
+    t.repeat.set(MAP_G*0.5,MAP_G*0.5); // 每格约6世界单位
+    return t;
+}
+
 // ─── 地图构建 ────────────────────────────────────────────────────────────────
 function buildMap(seed, theme){
     // 地面
     const ground = new THREE.Mesh(
         new THREE.PlaneGeometry(MAP_G*CELL, MAP_G*CELL),
-        new THREE.MeshLambertMaterial({ color: theme.ground })
+        new THREE.MeshLambertMaterial({ map: _mkGroundTex(theme.ground) })
     );
     ground.rotation.x = -Math.PI/2;
     ground.position.set(MAP_G*CELL/2, 0, MAP_G*CELL/2);
@@ -2785,14 +2842,36 @@ function buildMap(seed, theme){
                 grid[x][z]=0;
     });
 
+    // 额外打通（让迷宫更开放，减少死胡同，增加交战路径）
+    let extras=Math.floor(MAP_G*0.5);
+    while(extras-->0){
+        const ex=2+Math.floor(rng()*(MAP_G-4));
+        const ez=2+Math.floor(rng()*(MAP_G-4));
+        if(!grid[ex][ez]) continue;
+        const hOpen=!grid[ex-1][ez]&&!grid[ex+1][ez];
+        const vOpen=!grid[ex][ez-1]&&!grid[ex][ez+1];
+        if(hOpen||vOpen) grid[ex][ez]=0;
+    }
+    // 随机挖小房间（3×3净空间，形成开阔交战区）
+    const numRooms=4+Math.floor(rng()*4);
+    for(let ri=0;ri<numRooms;ri++){
+        const rx=8+Math.floor(rng()*(MAP_G-16));
+        const rz=8+Math.floor(rng()*(MAP_G-16));
+        for(let dx=-1;dx<=1;dx++) for(let dz=-1;dz<=1;dz++){
+            if(rx+dx>0&&rx+dx<MAP_G-1&&rz+dz>0&&rz+dz<MAP_G-1)
+                grid[rx+dx][rz+dz]=0;
+        }
+    }
+
     // ─ InstancedMesh：全部墙体 1 次 DrawCall（原来每格一个 Mesh，数百次 DrawCall）
     let wallCount=0;
     for(let x=0;x<MAP_G;x++) for(let z=0;z<MAP_G;z++) if(grid[x][z]) wallCount++;
 
     const wallGeo = new THREE.BoxGeometry(CELL, 3.2, CELL);
-    const wallMat = new THREE.MeshLambertMaterial({ color: theme.wall });
+    const wallMat = new THREE.MeshLambertMaterial({ map: _mkWallTex(theme.wall) });
     const wallMesh = new THREE.InstancedMesh(wallGeo, wallMat, wallCount);
     wallMesh.receiveShadow = true;
+    wallMesh.frustumCulled = false; // BV覆盖全图，跳过无意义剔除检测
     const _dummy = new THREE.Object3D();
     let wIdx=0;
     for(let x=0;x<MAP_G;x++){
@@ -2841,6 +2920,24 @@ function buildMap(seed, theme){
         });
         crateMesh.instanceMatrix.needsUpdate=true;
         gScene.add(crateMesh);
+    }
+
+    // 夜战：散布彩色霓虹点光源（用独立种子，不影响掩体箱RNG序列）
+    if(theme.hasLights){
+        const neons=[0x4060ff,0xff2255,0x22ffaa,0xffaa20];
+        const lr=mulberry32(seed^0xCAFE1234);
+        let placed=0, ntries=0;
+        while(placed<6 && ntries<200){
+            ntries++;
+            const lx=(3+Math.floor(lr()*(MAP_G-6)))*CELL+CELL/2;
+            const lz=(3+Math.floor(lr()*(MAP_G-6)))*CELL+CELL/2;
+            if(!grid[Math.floor(lx/CELL)]?.[Math.floor(lz/CELL)]){
+                const pl=new THREE.PointLight(neons[placed%neons.length],5,14);
+                pl.position.set(lx,1.5,lz);
+                gScene.add(pl);
+                placed++;
+            }
+        }
     }
 
     // 小地图静态层预渲染
@@ -3079,12 +3176,11 @@ function shoot(){
     if(ammo > 0) ammo--;
     updateAmmoHUD();
 
-    // 射线检测（朝相机前方）
-    const raycaster = new THREE.Raycaster();
-    raycaster.setFromCamera(new THREE.Vector2(0,0), gCamera);
+    // 射线检测（单例复用，避免每次 new Raycaster / new Vector2）
+    _rc.setFromCamera(_rcCtr, gCamera);
 
     const meshes = Object.values(gOtherPlayers).filter(p=>p.alive).map(p=>p.mesh);
-    const hits = raycaster.intersectObjects(meshes, true);
+    const hits = _rc.intersectObjects(meshes, true);
 
     let hitTarget = null;
     if(hits.length){
@@ -3101,7 +3197,7 @@ function shoot(){
 
     // 射击特效
     spawnMuzzleFlash();
-    spawnTracer(hitTarget ? hits[0].point : raycaster.ray.at(50, new THREE.Vector3()));
+    spawnTracer(hitTarget ? hits[0].point : _rc.ray.at(50, _rcEnd));
 
     if(hitTarget && socket){
         socket.emit('game:hit', { targetId: hitTarget, damage: curWeapon.dmg, weaponId: curWeapon.id });
@@ -3109,7 +3205,7 @@ function shoot(){
     }
 
     // 广播射击
-    if(socket) socket.emit('game:shoot', { dir: raycaster.ray.direction, weaponId: curWeapon.id });
+    if(socket) socket.emit('game:shoot', { dir: _rc.ray.direction, weaponId: curWeapon.id });
 }
 
 function spawnMuzzleFlash(){
