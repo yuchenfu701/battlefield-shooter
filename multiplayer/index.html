@@ -2650,13 +2650,13 @@ let lastShot = 0;
 // ── 地图主题（4种，按 mapSeed % 4 选取）──────────────────────────────────────
 const MAP_THEMES = [
     { wall:0x546070, ground:0x3d5030, sky:0x87ceeb, fog:0x87ceeb, fogN:25, fogF:100,
-      sun:0xfff0d8, sunI:1.4, amb:0x405060, ambI:0.7, crate:0x7a5820, mm:'#3a4a55' }, // 城市
+      sun:0xfff0d8, sunI:1.4, amb:0x405060, ambI:0.7, crate:0x7a5820, mm:'#3a4a55', pillar:0x708090 }, // 城市
     { wall:0xb08050, ground:0xb08840, sky:0xd8c070, fog:0xd0b458, fogN:20, fogF:90,
-      sun:0xffcc88, sunI:1.7, amb:0x604028, ambI:0.5, crate:0xa06028, mm:'#907040' }, // 沙漠
+      sun:0xffcc88, sunI:1.7, amb:0x604028, ambI:0.5, crate:0xa06028, mm:'#907040', pillar:0xc0a060 }, // 沙漠
     { wall:0x3a5428, ground:0x243818, sky:0x6a8868, fog:0x608060, fogN:15, fogF:70,
-      sun:0xfff8e8, sunI:1.0, amb:0x1e3818, ambI:0.7, crate:0x405020, mm:'#3a5428' }, // 丛林
+      sun:0xfff8e8, sunI:1.0, amb:0x1e3818, ambI:0.7, crate:0x405020, mm:'#3a5428', pillar:0x5a3a20 }, // 丛林
     { wall:0x1e2d40, ground:0x101820, sky:0x0a1018, fog:0x0a1018, fogN:10, fogF:55,
-      sun:0x8090b8, sunI:0.4, amb:0x0c1420, ambI:0.5, crate:0x1a2030, mm:'#1e2d40', hasLights:true }, // 夜战
+      sun:0x8090b8, sunI:0.4, amb:0x0c1420, ambI:0.5, crate:0x1a2030, mm:'#1e2d40', pillar:0x405080, hasLights:true }, // 夜战
 ];
 // ── 共享玩家几何体（所有玩家复用，避免每次 new BoxGeometry）──────────────────
 const PLAYER_GEOS = {
@@ -2740,6 +2740,8 @@ function initGame(matchData){
 
     gameState.active = true;
     cancelAnimationFrame(gAnimId);
+    gRenderer.shadowMap.autoUpdate = false;
+    gRenderer.shadowMap.needsUpdate = true; // 首帧计算阴影；场景静止后永不重绘
     gameLoop();
 }
 
@@ -2920,6 +2922,48 @@ function buildMap(seed, theme){
         });
         crateMesh.instanceMatrix.needsUpdate=true;
         gScene.add(crateMesh);
+    }
+
+    // 出生区标记圈（帮助玩家识别己方出生点）
+    const _TC=[0xe74c3c,0x3498db,0x2ecc71,0xf39c12];
+    [[4,4],[MAP_G-4,4],[4,MAP_G-4],[MAP_G-4,MAP_G-4]].forEach(([gx,gz],i)=>{
+        const circ=new THREE.Mesh(
+            new THREE.CircleGeometry(6,24),
+            new THREE.MeshBasicMaterial({color:_TC[i],transparent:true,opacity:0.22,depthWrite:false})
+        );
+        circ.rotation.x=-Math.PI/2;
+        circ.position.set(gx*CELL,0.02,gz*CELL);
+        gScene.add(circ);
+    });
+
+    // 装饰支柱（独立种子，不影响掩体箱位置，仅放开阔区域）
+    const _pRng=mulberry32(seed^0xABC99123);
+    const _pPos=[];
+    let _pt=0;
+    while(_pPos.length<6&&_pt<300){
+        _pt++;
+        const px=5+Math.floor(_pRng()*(MAP_G-10));
+        const pz=5+Math.floor(_pRng()*(MAP_G-10));
+        if(grid[px][pz]) continue;
+        if(SPAWN_SAFE.some(s=>px>=s.x&&px<s.x+margin&&pz>=s.z&&pz<s.z+margin)) continue;
+        const openN=[[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,-1],[1,-1],[-1,1]]
+            .filter(([dx,dz])=>{const nx=px+dx,nz=pz+dz;return nx>=0&&nx<MAP_G&&nz>=0&&nz<MAP_G&&!grid[nx][nz];}).length;
+        if(openN<5) continue;
+        grid[px][pz]=1;
+        _pPos.push({px,pz});
+    }
+    if(_pPos.length){
+        const pGeo=new THREE.CylinderGeometry(0.28,0.32,3.0,8);
+        const pMat=new THREE.MeshLambertMaterial({color:theme.pillar||theme.wall});
+        const pMesh=new THREE.InstancedMesh(pGeo,pMat,_pPos.length);
+        pMesh.castShadow=true; pMesh.receiveShadow=true;
+        _pPos.forEach(({px,pz},i)=>{
+            _dummy.position.set(px*CELL+CELL/2,1.5,pz*CELL+CELL/2);
+            _dummy.rotation.set(0,0,0); _dummy.updateMatrix();
+            pMesh.setMatrixAt(i,_dummy.matrix);
+        });
+        pMesh.instanceMatrix.needsUpdate=true;
+        gScene.add(pMesh);
     }
 
     // 夜战：散布彩色霓虹点光源（用独立种子，不影响掩体箱RNG序列）
@@ -3427,6 +3471,7 @@ document.addEventListener('keydown',e=>{
     if(e.code==='Digit1') switchWeapon(0);
     if(e.code==='Digit2') switchWeapon(1);
     if(e.code==='Digit3') switchWeapon(2);
+    if(e.code==='Digit4') switchWeapon(3);
     if(e.code==='Escape'){
         if(document.getElementById('page-game').classList.contains('active')){
             gameState.paused = !gameState.paused;
@@ -3442,6 +3487,14 @@ document.addEventListener('keyup',e=>{
     if(e.code==='KeyD') gInput.d=0;
     if(e.code==='ShiftLeft'||e.code==='ShiftRight') gInput.sprint=false;
 });
+document.addEventListener('visibilitychange',()=>{
+    if(document.hidden){
+        cancelAnimationFrame(gAnimId); gAnimId=null;
+    } else if(gameState.active&&!gameState.paused&&!gAnimId){
+        if(gClock) gClock.getDelta(); // 重置 clock 避免切回后 dt 暴增
+        gameLoop();
+    }
+});
 
 function reloadWeapon(){
     if(ammoRes<=0 || ammo===curWeapon.ammo) return;
@@ -3456,10 +3509,13 @@ function reloadWeapon(){
 }
 
 function switchWeapon(idx){
-    if(idx >= WEAPONS.length) return;
-    curWeapon = WEAPONS[idx];
-    ammo = curWeapon.ammo; ammoRes = curWeapon.res;
+    if(idx>=WEAPONS.length||!gameState.active) return;
+    if(WEAPONS[idx]===curWeapon) return;
+    curWeapon=WEAPONS[idx];
+    ammo=curWeapon.ammo; ammoRes=curWeapon.res;
     updateAmmoHUD();
+    SFX.click();
+    showToast(curWeapon.name);
 }
 
 function resumeGame(){
