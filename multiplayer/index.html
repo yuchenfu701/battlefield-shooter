@@ -2678,6 +2678,8 @@ const _tracerUp = new THREE.Vector3(0,1,0);
 const _tracerDir = new THREE.Vector3();
 // ── 小地图静态缓存（buildMap后预渲染一次，每帧只画玩家）─────────────────────
 let _minimapCache = null;
+// ── 各武器独立弹匣存档（切枪保留弹药，不重置满弹）──────────────────────────
+const _weaponAmmo = {};
 // ── 射线检测单例（避免每次 new Raycaster / new Vector2）────────────────────
 const _rc = new THREE.Raycaster();
 const _rcCtr = new THREE.Vector2(0,0);
@@ -2696,12 +2698,26 @@ function initGame(matchData){
 
     const _theme = MAP_THEMES[matchData.mapSeed % MAP_THEMES.length];
 
+    if(gScene){
+        gScene.traverse(obj=>{
+            if(obj.geometry) obj.geometry.dispose();
+            if(obj.material){
+                const mats=Array.isArray(obj.material)?obj.material:[obj.material];
+                mats.forEach(m=>{ if(m.map&&m!==TEAM_MATS[0]&&m!==TEAM_MATS[1]&&m!==TEAM_MATS[2]&&m!==TEAM_MATS[3]&&m!==SKIN_MAT&&m!==DARK_MAT&&m!==GUN_MAT) m.map.dispose(); });
+            }
+        });
+    }
+
     gScene  = new THREE.Scene();
     gScene.background = new THREE.Color(_theme.sky);
     gScene.fog = new THREE.Fog(_theme.fog, _theme.fogN, _theme.fogF);
 
     gCamera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.1, 200);
+    gCamera.rotation.order = 'YXZ';
     gClock  = new THREE.Clock();
+
+    curWeapon = WEAPONS[0];
+    WEAPONS.forEach(w=>{ _weaponAmmo[w.id]={ammo:w.ammo,res:w.res}; });
 
     // 灯光（随主题变化）
     const sun = new THREE.DirectionalLight(_theme.sun, _theme.sunI);
@@ -2883,7 +2899,6 @@ function buildMap(seed, theme){
             _dummy.rotation.set(0,0,0);
             _dummy.updateMatrix();
             wallMesh.setMatrixAt(wIdx++, _dummy.matrix);
-            gMap.walls.push({ x:x*CELL, z:z*CELL, size:CELL });
         }
     }
     wallMesh.instanceMatrix.needsUpdate = true;
@@ -2918,7 +2933,6 @@ function buildMap(seed, theme){
             _dummy.rotation.set(0,r,0);
             _dummy.updateMatrix();
             crateMesh.setMatrixAt(i,_dummy.matrix);
-            gMap.walls.push({x:cx*CELL,z:cz*CELL,size:CELL});
         });
         crateMesh.instanceMatrix.needsUpdate=true;
         gScene.add(crateMesh);
@@ -3082,9 +3096,10 @@ function gameLoop(){
         gPitch  = Math.max(-0.4, Math.min(0.35, gPitch - gMouseDY * 0.002));
         gMouseDX = gMouseDY = 0;
     }
-    gCamera.rotation.order = 'YXZ';
     gCamera.rotation.y = gYaw;
     gCamera.rotation.x = gPitch;
+    const _tFov=(gInput.sprint&&(gInput.w||gInput.s||gInput.a||gInput.d))?78:70;
+    if(Math.abs(gCamera.fov-_tFov)>0.1){gCamera.fov+=(_tFov-gCamera.fov)*0.12;gCamera.updateProjectionMatrix();}
 
     // 更新小地图
     drawMinimap();
@@ -3110,10 +3125,13 @@ function movePlayer(dt){
     }
 }
 
-function wallAt(wx, wz){
-    const gx = Math.floor(wx/CELL), gz = Math.floor(wz/CELL);
+function _wc(wx, wz){
+    const gx=Math.floor(wx/CELL), gz=Math.floor(wz/CELL);
     if(gx<0||gx>=MAP_G||gz<0||gz>=MAP_G) return true;
-    return gMap.grid[gx] && gMap.grid[gx][gz]===1;
+    return gMap.grid[gx]?.[gz]===1;
+}
+function wallAt(wx, wz, r=0.35){
+    return _wc(wx,wz)||_wc(wx-r,wz)||_wc(wx+r,wz)||_wc(wx,wz-r)||_wc(wx,wz+r);
 }
 
 // ─── 小地图（墙体已预缓存，每帧只画动态元素）───────────────────────────────
@@ -3511,8 +3529,10 @@ function reloadWeapon(){
 function switchWeapon(idx){
     if(idx>=WEAPONS.length||!gameState.active) return;
     if(WEAPONS[idx]===curWeapon) return;
+    _weaponAmmo[curWeapon.id]={ammo,res:ammoRes};
     curWeapon=WEAPONS[idx];
-    ammo=curWeapon.ammo; ammoRes=curWeapon.res;
+    const _s=_weaponAmmo[curWeapon.id]||{ammo:curWeapon.ammo,res:curWeapon.res};
+    ammo=_s.ammo; ammoRes=_s.res;
     updateAmmoHUD();
     SFX.click();
     showToast(curWeapon.name);
