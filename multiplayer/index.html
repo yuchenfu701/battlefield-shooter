@@ -2678,15 +2678,15 @@ let lastShot = 0;
 
 // ── 地图主题（4种，按 mapSeed % 4 选取）──────────────────────────────────────
 const MAP_THEMES = [
-    { id:'urban',  wall:0x546070, ground:0x3d5030, sky:0x88c0d8, fog:0x88c0d8, fogN:25, fogF:100,
-      sun:0xfff0d8, sunI:1.4, amb:0x405060, ambI:0.7, crate:0x7a5820, mm:'#3a4a55', pillar:0x708090 }, // 城市
-    { id:'desert', wall:0xb08050, ground:0x9a7030, sky:0xe0a840, fog:0xd0a040, fogN:20, fogF:90,
+    { id:'urban',  wall:0x5a5c60, ground:0x484848, sky:0x88c0d8, fog:0x88c0d8, fogN:25, fogF:100,
+      sun:0xfff0d8, sunI:1.4, amb:0x405060, ambI:0.7, crate:0x7a5820, mm:'#3a4a55', pillar:0x686a6e }, // 城市
+    { id:'desert', wall:0xb09060, ground:0x9a8040, sky:0xe0a840, fog:0xd0a040, fogN:20, fogF:90,
       sun:0xffcc88, sunI:1.7, amb:0x604028, ambI:0.5, crate:0xa06028, mm:'#907040', pillar:0xc0a060 }, // 沙漠
-    { id:'forest', wall:0x3a5428, ground:0x1e2e10, sky:0x3d5530, fog:0x3d5530, fogN:15, fogF:70,
-      sun:0xfff8e8, sunI:1.0, amb:0x1e3818, ambI:0.7, crate:0x405020, mm:'#3a5428', pillar:0x5a3a20 }, // 丛林
-    { id:'night',  wall:0x1e2d40, ground:0x101820, sky:0x080d18, fog:0x080d18, fogN:10, fogF:55,
-      sun:0x8090b8, sunI:0.4, amb:0x0c1420, ambI:0.5, crate:0x1a2030, mm:'#1e2d40', pillar:0x405080, hasLights:true }, // 夜战
-    { id:'snow',   wall:0xc8d4dc, ground:0xd8e4ec, sky:0xa8c4d8, fog:0xc0d8e8, fogN:18, fogF:72,
+    { id:'forest', wall:0x6a5838, ground:0x2a2010, sky:0x3d5530, fog:0x3d5530, fogN:15, fogF:70,
+      sun:0xfff8e8, sunI:1.0, amb:0x243818, ambI:0.65, crate:0x504028, mm:'#3a5428', pillar:0x5a4830 }, // 丛林
+    { id:'night',  wall:0x303840, ground:0x1a1e24, sky:0x080d18, fog:0x080d18, fogN:10, fogF:55,
+      sun:0x8090b8, sunI:0.4, amb:0x0c1420, ambI:0.5, crate:0x202830, mm:'#1e2d40', pillar:0x404858, hasLights:true }, // 夜战
+    { id:'snow',   wall:0xb8c4cc, ground:0xd0dce4, sky:0xa8c4d8, fog:0xc0d8e8, fogN:18, fogF:72,
       sun:0xfff8f0, sunI:0.75, amb:0x8090a0, ambI:0.9, crate:0x8090a0, mm:'#90a8b8', pillar:0xa0b4c4 }, // 雪地
 ];
 // ── 共享玩家几何体（所有玩家复用，避免每次 new BoxGeometry）──────────────────
@@ -2799,55 +2799,329 @@ function initGame(matchData){
 }
 
 // ─── 程序化纹理（Canvas生成，无需图片文件）──────────────────────────────────
-function _mkWallTex(hex){
-    const W=128,H=128,cv=document.createElement('canvas');
+function _mkWallTex(hex,theme){
+    const W=256,H=256,cv=document.createElement('canvas');
     cv.width=W; cv.height=H;
     const ctx=cv.getContext('2d');
-    const r=(hex>>16)&255,g=(hex>>8)&255,b=hex&255;
-    // 底色
-    ctx.fillStyle=`rgb(${r},${g},${b})`; ctx.fillRect(0,0,W,H);
-    // 砖块图案（4列×8行，隔行偏移）
-    const BW=32,BH=16;
-    for(let row=0;row<8;row++){
-        for(let col=-1;col<5;col++){
-            const x=(row%2===0?col:col-0.5)*BW, y=row*BH;
-            const sv=(Math.sin(col*7.3+row*5.1)*9)|0;
-            ctx.fillStyle=`rgb(${Math.max(0,Math.min(255,r+sv))},${Math.max(0,Math.min(255,g+sv))},${Math.max(0,Math.min(255,b+sv))})`;
-            ctx.fillRect(x+1,y+1,BW-2,BH-2);
+    const r0=(hex>>16)&255,g0=(hex>>8)&255,b0=hex&255;
+    const clamp=(v,lo=0,hi=255)=>Math.max(lo,Math.min(hi,v|0));
+    // seeded hash noise for deterministic surface variation
+    const noise=(x,y,seed=1)=>{let h=((x*73856093^y*19349663^seed)*2654435761)>>>0;return(h&255)/255;};
+    const rc=(dr,dg,db)=>`rgb(${clamp(r0+dr)},${clamp(g0+dg)},${clamp(b0+db)})`;
+    const id=theme?theme.id:'urban';
+
+    if(id==='desert'){
+        // 砂岩水平层纹
+        ctx.fillStyle=rc(0,0,0); ctx.fillRect(0,0,W,H);
+        for(let y=0;y<H;y++){
+            const band=Math.floor(y/18);
+            const sv=(noise(band,0,1)*24-12)|0;
+            const grain=(noise(y&255,(band*7)&255,2)*8-4)|0;
+            ctx.fillStyle=rc(sv+grain,sv*0.7+grain,-grain);
+            ctx.fillRect(0,y,W,1);
         }
-    }
-    // 灰缝
-    ctx.strokeStyle='rgba(0,0,0,0.30)'; ctx.lineWidth=2;
-    for(let row=0;row<=8;row++){ctx.beginPath();ctx.moveTo(0,row*BH);ctx.lineTo(W,row*BH);ctx.stroke();}
-    for(let row=0;row<8;row++){
-        const off=row%2===0?0:BW/2;
-        for(let col=0;col<=5;col++){const x=col*BW-BW+off;ctx.beginPath();ctx.moveTo(x,row*BH);ctx.lineTo(x,(row+1)*BH);ctx.stroke();}
+        // 水平裂缝
+        for(let y=18;y<H;y+=18){
+            const jitter=(noise(y,0,3)*6-3)|0;
+            ctx.strokeStyle='rgba(0,0,0,0.35)'; ctx.lineWidth=1.5;
+            ctx.beginPath(); ctx.moveTo(0,y+jitter); ctx.lineTo(W,y+jitter+((noise(y,1,4)*4-2)|0)); ctx.stroke();
+            ctx.strokeStyle='rgba(255,240,200,0.12)'; ctx.lineWidth=1;
+            ctx.beginPath(); ctx.moveTo(0,y+jitter+2); ctx.lineTo(W,y+jitter+2); ctx.stroke();
+        }
+        // 竖向侵蚀纹
+        for(let x=0;x<W;x+=24){
+            const wv=noise(x,0,5)*12-6;
+            ctx.strokeStyle=`rgba(0,0,0,${0.06+noise(x,1,6)*0.08})`; ctx.lineWidth=noise(x,2,7)*2+0.5;
+            ctx.beginPath(); ctx.moveTo(x+wv,0); ctx.lineTo(x+wv+(noise(x,3,8)*6-3),H); ctx.stroke();
+        }
+    } else if(id==='forest'){
+        // 粗糙石块 + 苔藓
+        ctx.fillStyle=rc(0,0,0); ctx.fillRect(0,0,W,H);
+        const BW=64,BH=40;
+        for(let row=0;row<7;row++){
+            for(let col=-1;col<5;col++){
+                const ox=row%2===0?0:BW/2;
+                const x=col*BW+ox, y=row*BH;
+                const sv=(noise(col&15,row&15,9)*30-15)|0;
+                // 石块底色 — 偏棕褐不偏绿
+                ctx.fillStyle=rc(sv,sv*0.6,sv*0.4);
+                ctx.fillRect(x+2,y+2,BW-4,BH-4);
+                // 表面粗糙纹理（小点）
+                for(let i=0;i<8;i++){
+                    const px=x+2+(noise(col+i*3,row+i,10)*( BW-6))|0;
+                    const py=y+2+(noise(col+i*2,row+i*3,11)*(BH-6))|0;
+                    const ds=(noise(i,col+row,12)*16-8)|0;
+                    ctx.fillStyle=`rgba(0,0,0,${0.08+noise(i,col,13)*0.12})`;
+                    ctx.fillRect(px,py,2,2);
+                }
+                // 苔藓斑点（靠下边缘，绿褐色）
+                if(noise(col&15,row&15,14)>0.55){
+                    const mw=(noise(col,row,15)*BW*0.5+8)|0;
+                    const mh=(noise(col+1,row,16)*BH*0.35+4)|0;
+                    ctx.fillStyle=`rgba(50,70,20,${0.25+noise(col,row,17)*0.25})`;
+                    ctx.fillRect(x+4,y+BH-mh-2,mw,mh);
+                }
+            }
+        }
+        // 缝隙（深色不规则）
+        ctx.strokeStyle='rgba(10,8,4,0.55)'; ctx.lineWidth=2;
+        for(let row=0;row<=7;row++){
+            ctx.beginPath(); ctx.moveTo(0,row*BH);
+            for(let x=0;x<=W;x+=16){ ctx.lineTo(x,(row*BH+(noise(x/16,row,18)*4-2))|0); }
+            ctx.stroke();
+        }
+        for(let row=0;row<7;row++){
+            const ox=row%2===0?0:BW/2;
+            for(let col=0;col<=5;col++){
+                const cx=col*BW+ox;
+                ctx.beginPath();ctx.moveTo(cx,row*BH);ctx.lineTo(cx+(noise(col,row,19)*4-2),(row+1)*BH);ctx.stroke();
+            }
+        }
+    } else if(id==='night'){
+        // 金属板 + 铆钉 + 锈迹
+        ctx.fillStyle=rc(0,0,0); ctx.fillRect(0,0,W,H);
+        const PW=128,PH=128;
+        for(let py=0;py<2;py++) for(let px=0;px<2;px++){
+            const x=px*PW,y=py*PH;
+            const sv=(noise(px,py,20)*14-7)|0;
+            ctx.fillStyle=rc(sv,sv,sv+4);
+            ctx.fillRect(x+1,y+1,PW-2,PH-2);
+            // 面板光泽条纹（横向拉丝）
+            for(let i=0;i<PH;i+=3){
+                if(noise(px*10+i/3,py,21)>0.6){
+                    ctx.fillStyle=`rgba(255,255,255,${0.03+noise(px,py*10+i/3,22)*0.04})`;
+                    ctx.fillRect(x,y+i,PW,1);
+                }
+            }
+            // 铆钉（四角）
+            [[8,8],[PW-9,8],[8,PH-9],[PW-9,PH-9]].forEach(([rx,ry])=>{
+                const grd=ctx.createRadialGradient(x+rx-1,y+ry-1,0,x+rx,y+ry,4);
+                grd.addColorStop(0,'rgba(255,255,255,0.5)'); grd.addColorStop(1,'rgba(0,0,0,0.4)');
+                ctx.fillStyle=grd; ctx.beginPath(); ctx.arc(x+rx,y+ry,3.5,0,6.28); ctx.fill();
+            });
+            // 锈迹条
+            for(let i=0;i<4;i++){
+                if(noise(px*5+i,py*5,23)>0.65){
+                    const rx=(noise(px+i,py,24)*PW*0.7+PW*0.1)|0;
+                    const rh=(noise(px+i,py+1,25)*40+15)|0;
+                    ctx.fillStyle=`rgba(140,60,10,${0.1+noise(i,px+py,26)*0.18})`;
+                    ctx.fillRect(x+rx,y,3,rh);
+                }
+            }
+        }
+        // 面板缝（亮边+暗沟）
+        ctx.strokeStyle='rgba(0,0,0,0.7)'; ctx.lineWidth=3;
+        ctx.strokeRect(PW+0.5,0,0,H); ctx.strokeRect(0,PH+0.5,W,0);
+        ctx.strokeStyle='rgba(255,255,255,0.12)'; ctx.lineWidth=1;
+        ctx.strokeRect(PW+2,0,0,H); ctx.strokeRect(0,PH+2,W,0);
+    } else if(id==='snow'){
+        // 积雪压顶的石块
+        ctx.fillStyle=rc(0,0,0); ctx.fillRect(0,0,W,H);
+        const BW=48,BH=32;
+        for(let row=0;row<8;row++){
+            for(let col=-1;col<6;col++){
+                const ox=row%2===0?0:BW/2;
+                const x=col*BW+ox, y=row*BH;
+                const sv=(noise(col&15,row,27)*20-10)|0;
+                ctx.fillStyle=rc(sv,sv,sv+4);
+                ctx.fillRect(x+2,y+2,BW-4,BH-4);
+                // 顶部积雪
+                const snowH=(noise(col&15,row+1,28)*(BH*0.45)+3)|0;
+                ctx.fillStyle=`rgba(240,248,255,${0.75+noise(col,row,29)*0.2})`;
+                ctx.fillRect(x+2,y+2,BW-4,snowH);
+                // 冰晶光泽
+                ctx.fillStyle='rgba(200,230,255,0.15)';
+                for(let i=0;i<3;i++){
+                    const sx=(x+4+(noise(col+i,row,30)*(BW-8)))|0;
+                    ctx.fillRect(sx,y+2,1,snowH);
+                }
+            }
+        }
+        // 缝隙
+        ctx.strokeStyle='rgba(80,100,120,0.5)'; ctx.lineWidth=1.5;
+        for(let row=0;row<=8;row++){ctx.beginPath();ctx.moveTo(0,row*BH);ctx.lineTo(W,row*BH);ctx.stroke();}
+        for(let row=0;row<8;row++){
+            const ox=row%2===0?0:BW/2;
+            for(let col=0;col<=6;col++){const cx=col*BW+ox;ctx.beginPath();ctx.moveTo(cx,row*BH);ctx.lineTo(cx,(row+1)*BH);ctx.stroke();}
+        }
+    } else {
+        // urban — 混凝土板块 + 裂缝 + 污渍
+        ctx.fillStyle=rc(0,0,0); ctx.fillRect(0,0,W,H);
+        // 先铺底色噪点
+        for(let y=0;y<H;y++) for(let x=0;x<W;x+=4){
+            const n=(noise(x/4,y,31)*18-9)|0;
+            ctx.fillStyle=rc(n,n,n);
+            ctx.fillRect(x,y,4,1);
+        }
+        // 大板缝（8×4格，模拟混凝土预制板）
+        const PW=64,PH=64;
+        ctx.strokeStyle='rgba(0,0,0,0.45)'; ctx.lineWidth=2.5;
+        for(let x=0;x<=W;x+=PW){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+        for(let y=0;y<=H;y+=PH){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+        // 缝亮边
+        ctx.strokeStyle='rgba(255,255,255,0.08)'; ctx.lineWidth=1;
+        for(let x=0;x<=W;x+=PW){ctx.beginPath();ctx.moveTo(x+2,0);ctx.lineTo(x+2,H);ctx.stroke();}
+        for(let y=0;y<=H;y+=PH){ctx.beginPath();ctx.moveTo(0,y+2);ctx.lineTo(W,y+2);ctx.stroke();}
+        // 水渍
+        for(let i=0;i<6;i++){
+            const wx=(noise(i,0,32)*W)|0, wy=(noise(i,1,33)*H)|0;
+            const wr=(noise(i,2,34)*25+8)|0, wh=(noise(i,3,35)*40+15)|0;
+            ctx.fillStyle=`rgba(0,0,0,${0.06+noise(i,4,36)*0.1})`;
+            ctx.fillRect(wx,wy,wr,wh);
+        }
+        // 裂缝
+        for(let i=0;i<3;i++){
+            const cx=(noise(i,0,37)*W)|0, cy=(noise(i,1,38)*H)|0;
+            ctx.strokeStyle=`rgba(0,0,0,${0.3+noise(i,2,39)*0.2})`; ctx.lineWidth=1;
+            ctx.beginPath(); ctx.moveTo(cx,cy);
+            let x=cx,y=cy;
+            for(let s=0;s<8;s++){x+=(noise(i+s,0,40)*12-6)|0;y+=(noise(i+s,1,41)*10+3)|0;ctx.lineTo(x,y);}
+            ctx.stroke();
+        }
     }
     const t=new THREE.CanvasTexture(cv);
     t.wrapS=t.wrapT=THREE.RepeatWrapping;
     return t;
 }
 
-function _mkGroundTex(hex){
-    const W=128,H=128,cv=document.createElement('canvas');
+function _mkGroundTex(hex,theme){
+    const W=256,H=256,cv=document.createElement('canvas');
     cv.width=W; cv.height=H;
     const ctx=cv.getContext('2d');
-    const r=(hex>>16)&255,g=(hex>>8)&255,b=hex&255;
-    // 棋盘砖格
-    for(let i=0;i<4;i++) for(let j=0;j<4;j++){
-        const sv=(i+j)%2===0?-10:8;
-        ctx.fillStyle=`rgb(${Math.max(0,Math.min(255,r+sv))},${Math.max(0,Math.min(255,g+sv))},${Math.max(0,Math.min(255,b+sv))})`;
-        ctx.fillRect(i*32,j*32,32,32);
-    }
-    // 接缝
-    ctx.strokeStyle='rgba(0,0,0,0.18)'; ctx.lineWidth=1;
-    for(let i=0;i<=4;i++){
-        ctx.beginPath();ctx.moveTo(i*32,0);ctx.lineTo(i*32,H);ctx.stroke();
-        ctx.beginPath();ctx.moveTo(0,i*32);ctx.lineTo(W,i*32);ctx.stroke();
+    const r0=(hex>>16)&255,g0=(hex>>8)&255,b0=hex&255;
+    const clamp=(v,lo=0,hi=255)=>Math.max(lo,Math.min(hi,v|0));
+    const noise=(x,y,seed=1)=>{let h=((x*73856093^y*19349663^seed)*2654435761)>>>0;return(h&255)/255;};
+    const rc=(dr,dg,db)=>`rgb(${clamp(r0+dr)},${clamp(g0+dg)},${clamp(b0+db)})`;
+    const id=theme?theme.id:'urban';
+
+    if(id==='desert'){
+        // 沙地 + 沙纹涟漪
+        ctx.fillStyle=rc(0,0,0); ctx.fillRect(0,0,W,H);
+        for(let y=0;y<H;y++){
+            const ripple=Math.sin(y*0.18)*8;
+            for(let x=0;x<W;x+=2){
+                const n=(noise(x/2,y,50)*22-11)|0;
+                const wave=(Math.sin((x+ripple)*0.14)*5)|0;
+                ctx.fillStyle=rc(n+wave,n*0.8+wave,-wave);
+                ctx.fillRect(x,y,2,1);
+            }
+        }
+        // 小砾石
+        for(let i=0;i<80;i++){
+            const gx=(noise(i,0,51)*W)|0, gy=(noise(i,1,52)*H)|0;
+            const gs=(noise(i,2,53)*4+1)|0;
+            const gv=(noise(i,3,54)*20-10)|0;
+            ctx.fillStyle=rc(gv+10,gv+5,-5);
+            ctx.fillRect(gx,gy,gs,gs);
+        }
+    } else if(id==='forest'){
+        // 暗褐土地 + 落叶
+        ctx.fillStyle=rc(0,0,0); ctx.fillRect(0,0,W,H);
+        for(let y=0;y<H;y++) for(let x=0;x<W;x+=2){
+            const n=(noise(x/2,y,55)*20-10)|0;
+            // 偏棕色不偏绿
+            ctx.fillStyle=rc(n+4,n*0.6,n*0.3);
+            ctx.fillRect(x,y,2,1);
+        }
+        // 根须纹路（细线）
+        for(let i=0;i<12;i++){
+            const rx=(noise(i,0,56)*W)|0, ry=(noise(i,1,57)*H)|0;
+            ctx.strokeStyle=`rgba(20,12,4,${0.2+noise(i,2,58)*0.25})`; ctx.lineWidth=noise(i,3,59)+0.5;
+            ctx.beginPath(); ctx.moveTo(rx,ry);
+            let x=rx,y=ry;
+            for(let s=0;s<6;s++){x+=(noise(i+s,0,60)*20-10)|0;y+=(noise(i+s,1,61)*20-10)|0;ctx.lineTo(x,y);}
+            ctx.stroke();
+        }
+        // 落叶（椭圆）
+        for(let i=0;i<40;i++){
+            const lx=(noise(i,0,62)*W)|0, ly=(noise(i,1,63)*H)|0;
+            const lw=(noise(i,2,64)*8+4)|0, lh=(noise(i,3,65)*5+2)|0;
+            const angle=noise(i,4,66)*Math.PI;
+            const lv=(noise(i,5,67)*30-15)|0;
+            // 叶片偏黄褐/红褐，不要绿
+            const lr=clamp(r0+lv+20), lg=clamp(g0+lv-10), lb=clamp(b0+lv-20);
+            ctx.fillStyle=`rgba(${lr},${lg},${lb},0.7)`;
+            ctx.save(); ctx.translate(lx,ly); ctx.rotate(angle);
+            ctx.beginPath(); ctx.ellipse(0,0,lw,lh,0,0,6.28); ctx.fill();
+            ctx.restore();
+        }
+    } else if(id==='night'){
+        // 沥青 + 路标残迹 + 油渍
+        ctx.fillStyle=rc(0,0,0); ctx.fillRect(0,0,W,H);
+        for(let y=0;y<H;y++) for(let x=0;x<W;x+=2){
+            const n=(noise(x/2,y,68)*14-7)|0;
+            ctx.fillStyle=rc(n,n,n+2);
+            ctx.fillRect(x,y,2,1);
+        }
+        // 集料颗粒
+        for(let i=0;i<120;i++){
+            const ax=(noise(i,0,69)*W)|0, ay=(noise(i,1,70)*H)|0;
+            const as=(noise(i,2,71)*3+1)|0;
+            const av=(noise(i,3,72)*16-8)|0;
+            ctx.fillStyle=rc(av,av,av+4);
+            ctx.fillRect(ax,ay,as,as);
+        }
+        // 油渍（半透明深色椭圆）
+        for(let i=0;i<5;i++){
+            const ox=(noise(i,0,73)*W)|0, oy=(noise(i,1,74)*H)|0;
+            const ow=(noise(i,2,75)*30+15)|0, oh=(noise(i,3,76)*20+8)|0;
+            ctx.fillStyle=`rgba(0,0,10,${0.2+noise(i,4,77)*0.25})`;
+            ctx.beginPath(); ctx.ellipse(ox,oy,ow,oh,noise(i,5,78)*Math.PI,0,6.28); ctx.fill();
+        }
+        // 路面标线残迹
+        ctx.strokeStyle='rgba(200,180,60,0.12)'; ctx.lineWidth=12;
+        ctx.setLineDash([32,24]);
+        ctx.beginPath(); ctx.moveTo(W*0.5,0); ctx.lineTo(W*0.5,H); ctx.stroke();
+        ctx.setLineDash([]);
+    } else if(id==='snow'){
+        // 积雪地面 + 凹陷阴影
+        ctx.fillStyle=rc(0,0,0); ctx.fillRect(0,0,W,H);
+        for(let y=0;y<H;y++) for(let x=0;x<W;x+=2){
+            const n=(noise(x/2,y,79)*16-8)|0;
+            ctx.fillStyle=rc(n,n,n+8);
+            ctx.fillRect(x,y,2,1);
+        }
+        // 雪面压痕（浅蓝凹陷）
+        for(let i=0;i<18;i++){
+            const sx=(noise(i,0,80)*W)|0, sy=(noise(i,1,81)*H)|0;
+            const sw=(noise(i,2,82)*20+8)|0, sh=(noise(i,3,83)*12+5)|0;
+            ctx.fillStyle=`rgba(140,180,220,${0.12+noise(i,4,84)*0.12})`;
+            ctx.beginPath(); ctx.ellipse(sx,sy,sw,sh,noise(i,5,85)*1.2,0,6.28); ctx.fill();
+        }
+        // 冰晶闪烁（亮点）
+        for(let i=0;i<60;i++){
+            const px=(noise(i,0,86)*W)|0, py=(noise(i,1,87)*H)|0;
+            const pa=0.4+noise(i,2,88)*0.5;
+            ctx.fillStyle=`rgba(240,250,255,${pa})`;
+            ctx.fillRect(px,py,1,1);
+        }
+    } else {
+        // urban — 混凝土地面 + 扩张缝
+        ctx.fillStyle=rc(0,0,0); ctx.fillRect(0,0,W,H);
+        for(let y=0;y<H;y++) for(let x=0;x<W;x+=2){
+            const n=(noise(x/2,y,89)*16-8)|0;
+            ctx.fillStyle=rc(n,n,n);
+            ctx.fillRect(x,y,2,1);
+        }
+        // 板缝（64×64格）
+        const TS=64;
+        ctx.strokeStyle='rgba(0,0,0,0.4)'; ctx.lineWidth=2;
+        for(let x=0;x<=W;x+=TS){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+        for(let y=0;y<=H;y+=TS){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+        // 缝内侧阴影
+        ctx.strokeStyle='rgba(0,0,0,0.22)'; ctx.lineWidth=1;
+        for(let x=0;x<=W;x+=TS){ctx.beginPath();ctx.moveTo(x+3,0);ctx.lineTo(x+3,H);ctx.stroke();}
+        for(let y=0;y<=H;y+=TS){ctx.beginPath();ctx.moveTo(0,y+3);ctx.lineTo(W,y+3);ctx.stroke();}
+        // 板面划痕
+        for(let i=0;i<8;i++){
+            const sx=(noise(i,0,90)*W)|0, sy=(noise(i,1,91)*H)|0;
+            ctx.strokeStyle=`rgba(0,0,0,${0.1+noise(i,2,92)*0.12})`; ctx.lineWidth=1;
+            ctx.beginPath(); ctx.moveTo(sx,sy); ctx.lineTo(sx+(noise(i,3,93)*30-15)|0,sy+(noise(i,4,94)*20-10)|0); ctx.stroke();
+        }
     }
     const t=new THREE.CanvasTexture(cv);
     t.wrapS=t.wrapT=THREE.RepeatWrapping;
-    t.repeat.set(MAP_G*0.5,MAP_G*0.5); // 每格约6世界单位
+    t.repeat.set(MAP_G*0.35,MAP_G*0.35);
     return t;
 }
 
@@ -2928,7 +3202,7 @@ function buildMap(seed, theme){
     // 地面
     const ground = new THREE.Mesh(
         new THREE.PlaneGeometry(MAP_G*CELL, MAP_G*CELL),
-        new THREE.MeshLambertMaterial({ map: _mkGroundTex(theme.ground) })
+        new THREE.MeshLambertMaterial({ map: _mkGroundTex(theme.ground,theme) })
     );
     ground.rotation.x = -Math.PI/2;
     ground.position.set(MAP_G*CELL/2, 0, MAP_G*CELL/2);
@@ -2995,7 +3269,7 @@ function buildMap(seed, theme){
     for(let x=0;x<MAP_G;x++) for(let z=0;z<MAP_G;z++) if(grid[x][z]) wallCount++;
 
     const wallGeo = new THREE.BoxGeometry(CELL, 3.2, CELL);
-    const wallMat = new THREE.MeshLambertMaterial({ map: _mkWallTex(theme.wall) });
+    const wallMat = new THREE.MeshLambertMaterial({ map: _mkWallTex(theme.wall,theme) });
     const wallMesh = new THREE.InstancedMesh(wallGeo, wallMat, wallCount);
     wallMesh.receiveShadow = true;
     wallMesh.frustumCulled = false; // BV覆盖全图，跳过无意义剔除检测
@@ -3109,9 +3383,9 @@ function buildMap(seed, theme){
 
     // ─ 地形装饰（岩石/瓦砾/冰块，按主题变化，独立RNG）
     const _dRng=mulberry32(seed^0xD3C0BA5E);
-    const rockCol=theme.id==='snow'?0xbcc8d0:theme.id==='desert'?0x906a38:theme.id==='forest'?0x384228:theme.id==='night'?0x283040:0x484848;
+    const rockCol=theme.id==='snow'?0xb0bcc8:theme.id==='desert'?0x8a6030:theme.id==='forest'?0x5a4830:theme.id==='night'?0x303848:0x525252;
     const rockMat=new THREE.MeshLambertMaterial({color:rockCol});
-    const rockGeo=new THREE.SphereGeometry(1,5,4);
+    const rockGeo=new THREE.DodecahedronGeometry(1,0);
     const rockCount=8;
     const rockMesh=new THREE.InstancedMesh(rockGeo,rockMat,rockCount*3);
     rockMesh.castShadow=true; rockMesh.receiveShadow=true;
@@ -3257,7 +3531,7 @@ function _mkParticles(theme){
         vel[i*3+2]=(Math.random()-0.5)*(snow?0.4:0.08);
     }
     geo.setAttribute('position',new THREE.BufferAttribute(pos,3));
-    const col=night?0x8899ff:theme.id==='forest'?0x55ff88:theme.id==='desert'?0xddbb55:0xeeeeff;
+    const col=night?0x8899ff:theme.id==='forest'?0xc8e890:theme.id==='desert'?0xddbb55:0xeeeeff;
     const sz=snow?0.20:night?0.07:0.055;
     const mat=new THREE.PointsMaterial({color:col,size:sz,transparent:true,opacity:night?0.85:0.72,sizeAttenuation:true,depthWrite:false});
     const pts=new THREE.Points(geo,mat);
