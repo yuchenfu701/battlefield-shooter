@@ -501,6 +501,14 @@ input{outline:none;border:none;}
 }
 .hud-announce.show{opacity:1;}
 /* 狙击镜 */
+/* 屏幕晕影（边缘暗化，增加临场感）*/
+.vignette{
+  position:absolute;inset:0;pointer-events:none;z-index:5;
+  background:radial-gradient(ellipse at 50% 50%, transparent 52%, rgba(0,0,0,0.42) 80%, rgba(0,0,0,0.72) 100%);
+}
+/* 受伤红闪 */
+.hit-flash{position:absolute;inset:0;pointer-events:none;z-index:6;background:rgba(220,20,20,0);transition:background 0.08s;}
+.hit-flash.flash{background:rgba(220,20,20,0.32);}
 .scope-overlay{
   position:absolute;inset:0;display:none;pointer-events:none;
   background:radial-gradient(circle at 50% 50%,transparent 82px,rgba(0,0,0,0.97) 84px);
@@ -1156,6 +1164,8 @@ input{outline:none;border:none;}
     <div class="kill-feed" id="kill-feed"></div>
     <div class="minimap"><canvas id="minimap-canvas" width="140" height="140"></canvas></div>
     <div class="hud-announce" id="hud-announce"></div>
+    <div class="vignette"></div>
+    <div class="hit-flash" id="hit-flash"></div>
     <div class="scope-overlay" id="scope-overlay"><div class="scope-line-h"></div><div class="scope-line-v"></div></div>
     <div class="game-chat" id="game-chat-msgs"></div>
   </div>
@@ -2691,16 +2701,26 @@ const MAP_THEMES = [
 ];
 // ── 共享玩家几何体（所有玩家复用，避免每次 new BoxGeometry）──────────────────
 const PLAYER_GEOS = {
-    body: new THREE.BoxGeometry(0.5,0.7,0.28),
-    head: new THREE.BoxGeometry(0.3,0.3,0.3),
-    leg:  new THREE.BoxGeometry(0.22,0.5,0.22),
-    arm:  new THREE.BoxGeometry(0.16,0.5,0.16),
-    gun:  new THREE.BoxGeometry(0.06,0.1,0.6),
+    body:      new THREE.BoxGeometry(0.40,0.55,0.22),
+    vest:      new THREE.BoxGeometry(0.43,0.38,0.13),
+    head:      new THREE.BoxGeometry(0.26,0.24,0.25),
+    helmet:    new THREE.BoxGeometry(0.30,0.09,0.30),
+    helmBrim:  new THREE.BoxGeometry(0.33,0.05,0.18),
+    neck:      new THREE.BoxGeometry(0.12,0.09,0.12),
+    leg:       new THREE.BoxGeometry(0.17,0.50,0.17),
+    boot:      new THREE.BoxGeometry(0.20,0.10,0.22),
+    arm:       new THREE.BoxGeometry(0.13,0.44,0.13),
+    gunBody:   new THREE.BoxGeometry(0.055,0.072,0.36),
+    gunBarrel: new THREE.BoxGeometry(0.022,0.022,0.24),
+    gunMag:    new THREE.BoxGeometry(0.036,0.110,0.038),
 };
-const TEAM_MATS = [0xe74c3c,0x3498db,0x2ecc71,0xf39c12].map(c=>new THREE.MeshLambertMaterial({color:c}));
-const SKIN_MAT  = new THREE.MeshLambertMaterial({color:0xc8a878});
-const DARK_MAT  = new THREE.MeshLambertMaterial({color:0x222222});
-const GUN_MAT   = new THREE.MeshLambertMaterial({color:0x1a1a1a});
+const TEAM_MATS  = [0xe74c3c,0x3498db,0x2ecc71,0xf39c12].map(c=>new THREE.MeshPhongMaterial({color:c,shininess:10,specular:0x0a0a0a}));
+const SKIN_MAT   = new THREE.MeshPhongMaterial({color:0xc09060,shininess:6,specular:0x0a0808});
+const DARK_MAT   = new THREE.MeshPhongMaterial({color:0x1c1a18,shininess:5});
+const GUN_MAT    = new THREE.MeshPhongMaterial({color:0x191919,shininess:38,specular:0x202020});
+const VEST_MAT   = new THREE.MeshPhongMaterial({color:0x363e2e,shininess:4});
+const HELMET_MAT = new THREE.MeshPhongMaterial({color:0x2a2c26,shininess:12,specular:0x080808});
+const BOOT_MAT   = new THREE.MeshPhongMaterial({color:0x18100c,shininess:14,specular:0x0a0808});
 // ── 弹道 & 枪口火焰对象池（避免每帧 new Mesh / new Geometry）─────────────────
 const _TRACER_GEO = new THREE.CylinderGeometry(0.006,0.006,1,4);
 const _TRACER_MAT = new THREE.MeshBasicMaterial({color:0xffee88,transparent:true,opacity:0.85});
@@ -3409,7 +3429,7 @@ function buildMap(seed, theme){
     // ─ 地形装饰（岩石/瓦砾/冰块，按主题变化，独立RNG）
     const _dRng=mulberry32(seed^0xD3C0BA5E);
     const rockCol=theme.id==='snow'?0xb0bcc8:theme.id==='desert'?0x8a6030:theme.id==='forest'?0x5a4830:theme.id==='night'?0x303848:0x525252;
-    const rockMat=new THREE.MeshLambertMaterial({color:rockCol});
+    const rockMat=new THREE.MeshPhongMaterial({color:rockCol,shininess:8,specular:0x060606});
     const rockGeo=new THREE.DodecahedronGeometry(1,0);
     const rockCount=8;
     const rockMesh=new THREE.InstancedMesh(rockGeo,rockMat,rockCount*3);
@@ -3431,6 +3451,47 @@ function buildMap(seed, theme){
     });
     rockMesh.count=rFilled; rockMesh.instanceMatrix.needsUpdate=true;
     gScene.add(rockMesh);
+
+    // ─ 油桶（靠墙放置，Phong材质带金属高光）────────────────────────────────
+    const _bRng=mulberry32(seed^0xBAD1DEA5);
+    const barrelGeo=new THREE.CylinderGeometry(0.13,0.15,0.44,10);
+    const barrelCol=theme.id==='night'?0x304050:theme.id==='desert'?0x8a6030:theme.id==='forest'?0x3a4a25:theme.id==='snow'?0x606878:0x506070;
+    const barrelMat=new THREE.MeshPhongMaterial({color:barrelCol,shininess:22,specular:0x141414});
+    const barrelMesh=new THREE.InstancedMesh(barrelGeo,barrelMat,14);
+    barrelMesh.castShadow=true; barrelMesh.receiveShadow=true;
+    let bFilled=0,bTries=0;
+    while(bFilled<14&&bTries<400){ bTries++;
+        const bx=3+Math.floor(_bRng()*(MAP_G-6)), bz=3+Math.floor(_bRng()*(MAP_G-6));
+        if(grid[bx][bz]) continue;
+        const nearWall=grid[bx-1]?.[bz]||grid[bx+1]?.[bz]||grid[bx]?.[bz-1]||grid[bx]?.[bz+1];
+        if(!nearWall&&_bRng()>0.25) continue;
+        if(SPAWN_SAFE.some(s=>bx>=s.x&&bx<s.x+margin&&bz>=s.z&&bz<s.z+margin)) continue;
+        _dummy.position.set(bx*CELL+CELL/2+(_bRng()-0.5)*1.2,0.22,bz*CELL+CELL/2+(_bRng()-0.5)*1.2);
+        _dummy.rotation.set(0,_bRng()*6.28,(_bRng()-0.5)*0.07);
+        _dummy.scale.setScalar(1); _dummy.updateMatrix();
+        barrelMesh.setMatrixAt(bFilled++,_dummy.matrix);
+    }
+    barrelMesh.count=bFilled; barrelMesh.instanceMatrix.needsUpdate=true;
+    gScene.add(barrelMesh);
+
+    // ─ 木箱/弹药箱（散布场景提供掩体）──────────────────────────────────────
+    const _cRng=mulberry32(seed^0xC4A7E0F3);
+    const crateGeo=new THREE.BoxGeometry(0.48,0.48,0.48);
+    const crateMat=new THREE.MeshPhongMaterial({color:theme.crate||0x6a5828,shininess:5,specular:0x080808});
+    const crateMesh=new THREE.InstancedMesh(crateGeo,crateMat,10);
+    crateMesh.castShadow=true; crateMesh.receiveShadow=true;
+    let cFilled=0,cTries=0;
+    while(cFilled<10&&cTries<400){ cTries++;
+        const cx=3+Math.floor(_cRng()*(MAP_G-6)), cz=3+Math.floor(_cRng()*(MAP_G-6));
+        if(grid[cx][cz]) continue;
+        if(SPAWN_SAFE.some(s=>cx>=s.x&&cx<s.x+margin&&cz>=s.z&&cz<s.z+margin)) continue;
+        _dummy.position.set(cx*CELL+CELL/2+(_cRng()-0.5)*0.9,0.24,cz*CELL+CELL/2+(_cRng()-0.5)*0.9);
+        _dummy.rotation.set(0,_cRng()*Math.PI*0.5,0);
+        _dummy.scale.setScalar(0.85+_cRng()*0.30); _dummy.updateMatrix();
+        crateMesh.setMatrixAt(cFilled++,_dummy.matrix);
+    }
+    crateMesh.count=cFilled; crateMesh.instanceMatrix.needsUpdate=true;
+    gScene.add(crateMesh);
 
     // 雪地：冰晶装饰（细长棱柱点缀）
     if(theme.id==='snow'){
@@ -3469,37 +3530,51 @@ function _buildWpnViewmodel(){
     const dl=new THREE.DirectionalLight(0xffffff,0.65); dl.position.set(1,1.5,0.5); _wpnScene.add(dl);
 
     const g=new THREE.Group();
-    const M=c=>new THREE.MeshLambertMaterial({color:c});
-    const bx=(c,w,h,d,x,y,z,rx=0)=>{ const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),M(c)); m.position.set(x,y,z); if(rx) m.rotation.x=rx; g.add(m); return m; };
-    const cy=(c,r,h,s,x,y,z)=>{ const m=new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,s),M(c)); m.rotation.x=Math.PI/2; m.position.set(x,y,z); g.add(m); return m; };
+    // 金属件高光，木件哑光，皮肤漫反射
+    const Mm=(c,sh,sp=0)=>new THREE.MeshPhongMaterial({color:c,shininess:sh,specular:sp||0x080808});
+    const bx=(mat,w,h,d,x,y,z,rx=0)=>{ const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat); m.position.set(x,y,z); if(rx) m.rotation.x=rx; g.add(m); return m; };
+    const cy=(mat,r,h,s,x,y,z)=>{ const m=new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,s),mat); m.rotation.x=Math.PI/2; m.position.set(x,y,z); g.add(m); return m; };
 
-    const WD=0x2a1508, MT=0x181818, DK=0x202020, SK=0xc09878;
+    const mMT=Mm(0x181818,48,0x282828); // 暗金属（枪管/机匣）
+    const mDK=Mm(0x202020,55,0x303030); // 深金属（导轨/枪口）
+    const mWD=Mm(0x2a1508, 9,0x050300); // 木材（枪托/握把/弹匣）
+    const mSK=Mm(0xc09878,12,0x100808); // 手部皮肤
+    const WD=mWD, MT=mMT, DK=mDK, SK=mSK; // aliases
+
     // receiver / body
     bx(MT,0.065,0.076,0.40,  0,     0,    -0.200);
-    // top rail
+    // top rail（皮卡汀尼导轨）
     bx(DK,0.030,0.018,0.34,  0,  0.047,  -0.170);
+    // charging handle
+    bx(DK,0.022,0.014,0.030, 0.036,0.032,-0.130);
     // barrel
-    const _brl=cy(MT,0.009,0.42,8, 0,0.028,-0.530);
+    cy(MT,0.009,0.42,10, 0,0.028,-0.530);
+    // gas tube（导气管）
+    cy(DK,0.004,0.28,6, 0,0.044,-0.440);
     // muzzle brake
-    cy(DK,0.015,0.044,6, 0,0.028,-0.742);
+    cy(DK,0.015,0.044,8, 0,0.028,-0.742);
     // magazine
     const _mag=bx(WD,0.038,0.156,0.058, 0,-0.086,-0.180,0.22);
     // mag catch
     bx(MT,0.038,0.018,0.042, 0,-0.008,-0.186);
-    // stock
+    // stock（枪托，木质）
     const _stk=bx(WD,0.048,0.068,0.22, 0,-0.002, 0.085);
-    // pistol grip (wood shape)
+    // stock cheekpiece
+    bx(WD,0.046,0.032,0.08, 0, 0.022, 0.060);
+    // pistol grip
     bx(WD,0.040,0.108,0.050, 0,-0.094,-0.023,-0.32);
     // trigger guard
     bx(DK,0.006,0.048,0.060, 0,-0.064,-0.053);
     // front sight post
-    bx(DK,0.006,0.024,0.006, 0, 0.053,-0.615);
-    // rear sight
-    bx(DK,0.026,0.016,0.010, 0, 0.050,-0.300);
-    // hand grip (skin)
+    bx(DK,0.008,0.026,0.008, 0, 0.054,-0.618);
+    // rear sight aperture
+    bx(DK,0.028,0.018,0.012, 0, 0.051,-0.298);
+    // hand (skin)
     bx(SK,0.074,0.084,0.094, 0.013,-0.094,-0.023,-0.32);
-    // fore grip
+    // fore grip / handguard
     bx(SK,0.080,0.074,0.102, 0.012,-0.021,-0.215);
+    // handguard rail bottom
+    bx(DK,0.024,0.012,0.26, 0.012,-0.058,-0.215);
 
     _wpnUpdateFn=()=>{
         if(!_wpnMesh) return;
@@ -3583,14 +3658,33 @@ function _updateParticles(dt){
 function spawnOtherPlayer(sid, data){
     const tMat = TEAM_MATS[data.teamIdx] || TEAM_MATS[0];
     const g = new THREE.Group();
-    const body=new THREE.Mesh(PLAYER_GEOS.body, tMat); body.position.y=0.35; g.add(body);
-    const head=new THREE.Mesh(PLAYER_GEOS.head, SKIN_MAT); head.position.y=0.85; g.add(head);
-    [-0.12,0.12].forEach(xo=>{ const leg=new THREE.Mesh(PLAYER_GEOS.leg,DARK_MAT); leg.position.set(xo,-0.25,0); g.add(leg); });
-    [-0.35,0.35].forEach(xo=>{ const arm=new THREE.Mesh(PLAYER_GEOS.arm,tMat); arm.position.set(xo,0.15,0); g.add(arm); });
-    const gun=new THREE.Mesh(PLAYER_GEOS.gun,GUN_MAT); gun.position.set(0.35,0.25,-0.2); g.add(gun);
+    // 腿 + 靴子
+    [-0.10,0.10].forEach(xo=>{
+        const leg=new THREE.Mesh(PLAYER_GEOS.leg,DARK_MAT); leg.position.set(xo,-0.27,0); g.add(leg);
+        const boot=new THREE.Mesh(PLAYER_GEOS.boot,BOOT_MAT); boot.position.set(xo,-0.57,0.02); g.add(boot);
+    });
+    // 躯干 + 战术背心
+    const body=new THREE.Mesh(PLAYER_GEOS.body,DARK_MAT); body.position.y=0.36; g.add(body);
+    const vest=new THREE.Mesh(PLAYER_GEOS.vest,tMat); vest.position.set(0,0.40,0); g.add(vest);
+    // 颈部 + 头部（皮肤色）
+    const neck=new THREE.Mesh(PLAYER_GEOS.neck,SKIN_MAT); neck.position.y=0.70; g.add(neck);
+    const head=new THREE.Mesh(PLAYER_GEOS.head,SKIN_MAT); head.position.y=0.82; g.add(head);
+    // 头盔 + 盔檐
+    const helm=new THREE.Mesh(PLAYER_GEOS.helmet,HELMET_MAT); helm.position.set(0,0.93,0); g.add(helm);
+    const brim=new THREE.Mesh(PLAYER_GEOS.helmBrim,HELMET_MAT); brim.position.set(0,0.905,-0.10); g.add(brim);
+    // 手臂（团队色袖子）
+    [-0.30,0.30].forEach(xo=>{
+        const arm=new THREE.Mesh(PLAYER_GEOS.arm,tMat); arm.position.set(xo,0.36,0); g.add(arm);
+    });
+    // 枪械（三件套：机匣+枪管+弹匣）
+    const gunG=new THREE.Group(); gunG.position.set(0.30,0.52,-0.20);
+    const gb=new THREE.Mesh(PLAYER_GEOS.gunBody,GUN_MAT); gunG.add(gb);
+    const gbrl=new THREE.Mesh(PLAYER_GEOS.gunBarrel,GUN_MAT); gbrl.position.z=-0.28; gunG.add(gbrl);
+    const gmag=new THREE.Mesh(PLAYER_GEOS.gunMag,DARK_MAT); gmag.position.set(0,-0.088,0); gunG.add(gmag);
+    g.add(gunG);
     g.position.set(data.pos.x, data.pos.y, data.pos.z);
     gScene.add(g);
-    gOtherPlayers[sid]={mesh:g, hp:data.hp, teamIdx:data.teamIdx, alive:data.alive};
+    gOtherPlayers[sid]={mesh:g,hp:data.hp,teamIdx:data.teamIdx,alive:data.alive};
 }
 
 // ─── 游戏主循环 ──────────────────────────────────────────────────────────────
@@ -3921,9 +4015,9 @@ function onDamage(data){
     gameState.hp -= data.damage;
     gameState.hp = Math.max(0, gameState.hp);
     updateHpHUD(gameState.hp);
-    // 受伤红屏
-    document.getElementById('page-game').style.boxShadow='inset 0 0 60px rgba(200,0,0,0.5)';
-    setTimeout(()=>document.getElementById('page-game').style.boxShadow='',400);
+    // 受伤红闪（使用专用 hit-flash div，比 boxShadow 更清晰）
+    const _hf=document.getElementById('hit-flash');
+    if(_hf){ _hf.classList.add('flash'); setTimeout(()=>_hf.classList.remove('flash'),160); }
 }
 
 function onDeath(data){
