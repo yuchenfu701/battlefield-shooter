@@ -2751,6 +2751,9 @@ function initGame(matchData){
     }
     gRenderer.setSize(window.innerWidth, window.innerHeight);
     gRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    gRenderer.toneMapping = THREE.ACESFilmicToneMapping;
+    gRenderer.toneMappingExposure = 1.08;
+    gRenderer.outputEncoding = THREE.sRGBEncoding;
 
     const _theme = MAP_THEMES[matchData.mapSeed % MAP_THEMES.length];
 
@@ -2779,12 +2782,13 @@ function initGame(matchData){
     const sun = new THREE.DirectionalLight(_theme.sun, _theme.sunI);
     sun.position.set(30, 60, 20);
     sun.castShadow = true;
-    sun.shadow.mapSize.set(1024,1024);
+    sun.shadow.mapSize.set(2048,2048);
     sun.shadow.camera.near = 1; sun.shadow.camera.far = 200;
     sun.shadow.camera.left = -80; sun.shadow.camera.right = 80;
     sun.shadow.camera.top  =  80; sun.shadow.camera.bottom= -80;
     gScene.add(sun);
-    gScene.add(new THREE.AmbientLight(_theme.amb, _theme.ambI));
+    gScene.add(new THREE.HemisphereLight(_theme.sky, _theme.ground, _theme.ambI * 0.7));
+    gScene.add(new THREE.AmbientLight(_theme.amb, _theme.ambI * 0.3));
 
     // 地图
     buildMap(matchData.mapSeed, _theme);
@@ -3000,6 +3004,8 @@ function _mkWallTex(hex,theme){
     }
     const t=new THREE.CanvasTexture(cv);
     t.wrapS=t.wrapT=THREE.RepeatWrapping;
+    t.encoding=THREE.sRGBEncoding;
+    t.anisotropy=Math.min(8,gRenderer?.capabilities?.getMaxAnisotropy()||4);
     return t;
 }
 
@@ -3167,6 +3173,8 @@ function _mkGroundTex(hex,theme){
     const t=new THREE.CanvasTexture(cv);
     t.wrapS=t.wrapT=THREE.RepeatWrapping;
     t.repeat.set(MAP_G*0.35,MAP_G*0.35);
+    t.encoding=THREE.sRGBEncoding;
+    t.anisotropy=Math.min(8,gRenderer?.capabilities?.getMaxAnisotropy()||4);
     return t;
 }
 
@@ -3247,7 +3255,7 @@ function buildMap(seed, theme){
     // 地面
     const ground = new THREE.Mesh(
         new THREE.PlaneGeometry(MAP_G*CELL, MAP_G*CELL),
-        new THREE.MeshPhongMaterial({ map: _mkGroundTex(theme.ground,theme), shininess: theme.id==='snow'?18:theme.id==='night'?8:4, specular:0x111111 })
+        new THREE.MeshStandardMaterial({ map: _mkGroundTex(theme.ground,theme), roughness: theme.id==='snow'?0.58:theme.id==='night'?0.80:0.92, metalness: 0.0 })
     );
     ground.rotation.x = -Math.PI/2;
     ground.position.set(MAP_G*CELL/2, 0, MAP_G*CELL/2);
@@ -3314,9 +3322,9 @@ function buildMap(seed, theme){
     for(let x=0;x<MAP_G;x++) for(let z=0;z<MAP_G;z++) if(grid[x][z]) wallCount++;
 
     const wallGeo = new THREE.BoxGeometry(CELL, 3.2, CELL);
-    const wallMat = new THREE.MeshPhongMaterial({ map: _mkWallTex(theme.wall,theme), shininess: theme.id==='night'?55:theme.id==='snow'?20:6, specular: theme.id==='night'?0x303040:0x0a0a0a });
+    const wallMat = new THREE.MeshStandardMaterial({ map: _mkWallTex(theme.wall,theme), roughness: theme.id==='night'?0.32:theme.id==='snow'?0.62:0.86, metalness: theme.id==='night'?0.10:0.0 });
     const wallMesh = new THREE.InstancedMesh(wallGeo, wallMat, wallCount);
-    wallMesh.receiveShadow = true;
+    wallMesh.castShadow = true; wallMesh.receiveShadow = true;
     wallMesh.frustumCulled = false; // BV覆盖全图，跳过无意义剔除检测
     const _dummy = new THREE.Object3D();
     let wIdx=0;
@@ -3353,7 +3361,7 @@ function buildMap(seed, theme){
     }
     if(cratePos.length){
         const crateGeo=new THREE.BoxGeometry(2.2,0.9,2.2);
-        const crateMat=new THREE.MeshLambertMaterial({color:theme.crate});
+        const crateMat=new THREE.MeshStandardMaterial({color:theme.crate,roughness:0.85,metalness:0.0});
         const crateMesh=new THREE.InstancedMesh(crateGeo,crateMat,cratePos.length);
         crateMesh.castShadow=true; crateMesh.receiveShadow=true;
         cratePos.forEach(({cx,cz,r},i)=>{
@@ -3396,7 +3404,7 @@ function buildMap(seed, theme){
     }
     if(_pPos.length){
         const pGeo=new THREE.CylinderGeometry(0.28,0.32,3.0,8);
-        const pMat=new THREE.MeshLambertMaterial({color:theme.pillar||theme.wall});
+        const pMat=new THREE.MeshStandardMaterial({color:theme.pillar||theme.wall,roughness:0.84,metalness:0.0});
         const pMesh=new THREE.InstancedMesh(pGeo,pMat,_pPos.length);
         pMesh.castShadow=true; pMesh.receiveShadow=true;
         _pPos.forEach(({px,pz},i)=>{
@@ -3429,7 +3437,7 @@ function buildMap(seed, theme){
     // ─ 地形装饰（岩石/瓦砾/冰块，按主题变化，独立RNG）
     const _dRng=mulberry32(seed^0xD3C0BA5E);
     const rockCol=theme.id==='snow'?0xb0bcc8:theme.id==='desert'?0x8a6030:theme.id==='forest'?0x5a4830:theme.id==='night'?0x303848:0x525252;
-    const rockMat=new THREE.MeshPhongMaterial({color:rockCol,shininess:8,specular:0x060606});
+    const rockMat=new THREE.MeshStandardMaterial({color:rockCol,roughness:0.88,metalness:0.0});
     const rockGeo=new THREE.DodecahedronGeometry(1,0);
     const rockCount=8;
     const rockMesh=new THREE.InstancedMesh(rockGeo,rockMat,rockCount*3);
@@ -3456,7 +3464,7 @@ function buildMap(seed, theme){
     const _bRng=mulberry32(seed^0xBAD1DEA5);
     const barrelGeo=new THREE.CylinderGeometry(0.13,0.15,0.44,10);
     const barrelCol=theme.id==='night'?0x304050:theme.id==='desert'?0x8a6030:theme.id==='forest'?0x3a4a25:theme.id==='snow'?0x606878:0x506070;
-    const barrelMat=new THREE.MeshPhongMaterial({color:barrelCol,shininess:22,specular:0x141414});
+    const barrelMat=new THREE.MeshStandardMaterial({color:barrelCol,roughness:0.62,metalness:0.18});
     const barrelMesh=new THREE.InstancedMesh(barrelGeo,barrelMat,14);
     barrelMesh.castShadow=true; barrelMesh.receiveShadow=true;
     let bFilled=0,bTries=0;
@@ -3477,7 +3485,7 @@ function buildMap(seed, theme){
     // ─ 木箱/弹药箱（散布场景提供掩体）──────────────────────────────────────
     const _cRng=mulberry32(seed^0xC4A7E0F3);
     const crateGeo=new THREE.BoxGeometry(0.48,0.48,0.48);
-    const crateMat=new THREE.MeshPhongMaterial({color:theme.crate||0x6a5828,shininess:5,specular:0x080808});
+    const crateMat=new THREE.MeshStandardMaterial({color:theme.crate||0x6a5828,roughness:0.88,metalness:0.0});
     const crateMesh=new THREE.InstancedMesh(crateGeo,crateMat,10);
     crateMesh.castShadow=true; crateMesh.receiveShadow=true;
     let cFilled=0,cTries=0;
@@ -3497,7 +3505,7 @@ function buildMap(seed, theme){
     if(theme.id==='snow'){
         const iceRng=mulberry32(seed^0x1CE55AFF);
         const iceGeo=new THREE.CylinderGeometry(0.06,0.12,1.2,6);
-        const iceMat=new THREE.MeshLambertMaterial({color:0xd0eeff,transparent:true,opacity:0.72});
+        const iceMat=new THREE.MeshStandardMaterial({color:0xd0eeff,roughness:0.08,metalness:0.0,transparent:true,opacity:0.68});
         const iceMesh=new THREE.InstancedMesh(iceGeo,iceMat,12);
         let iIdx=0, iTries=0;
         while(iIdx<12&&iTries<300){ iTries++;
@@ -3509,6 +3517,64 @@ function buildMap(seed, theme){
             _dummy.updateMatrix(); iceMesh.setMatrixAt(iIdx++,_dummy.matrix);
         }
         iceMesh.instanceMatrix.needsUpdate=true; gScene.add(iceMesh);
+    }
+
+    // ─ 森林：树木（树干+双层树冠，InstancedMesh 2次DrawCall）──────────────────
+    if(theme.id==='forest'){
+        const tRng=mulberry32(seed^0x73EE2340);
+        const tPos=[];
+        for(let tries=0;tries<700&&tPos.length<24;tries++){
+            const tx=4+Math.floor(tRng()*(MAP_G-8)), tz=4+Math.floor(tRng()*(MAP_G-8));
+            if(grid[tx][tz]) continue;
+            if(SPAWN_SAFE.some(s=>tx>=s.x&&tx<s.x+margin&&tz>=s.z&&tz<s.z+margin)) continue;
+            tPos.push({wx:tx*CELL+CELL/2+(tRng()-0.5)*1.5,wz:tz*CELL+CELL/2+(tRng()-0.5)*1.5,sc:0.65+tRng()*0.55,ry:tRng()*6.28,fx:(tRng()-0.5)*0.7,fz:(tRng()-0.5)*0.7});
+        }
+        const tc=tPos.length;
+        const trnkGeo=new THREE.CylinderGeometry(0.12,0.19,2.4,7);
+        const trnkMat=new THREE.MeshStandardMaterial({color:0x3a2510,roughness:0.93,metalness:0});
+        const folGeo=new THREE.SphereGeometry(0.88,7,5);
+        const folMat=new THREE.MeshStandardMaterial({color:0x223812,roughness:0.95,metalness:0});
+        const trnkMesh=new THREE.InstancedMesh(trnkGeo,trnkMat,tc);
+        const folMesh=new THREE.InstancedMesh(folGeo,folMat,tc*2);
+        trnkMesh.castShadow=true; trnkMesh.receiveShadow=true;
+        folMesh.castShadow=true;
+        tPos.forEach(({wx,wz,sc,ry,fx,fz},i)=>{
+            _dummy.position.set(wx,1.2*sc,wz); _dummy.rotation.set(0,ry,0); _dummy.scale.setScalar(sc); _dummy.updateMatrix();
+            trnkMesh.setMatrixAt(i,_dummy.matrix);
+            _dummy.position.set(wx,2.85*sc,wz); _dummy.scale.set(sc*1.2,sc*0.88,sc*1.2); _dummy.updateMatrix();
+            folMesh.setMatrixAt(i*2,_dummy.matrix);
+            _dummy.position.set(wx+fx*sc,3.45*sc,wz+fz*sc); _dummy.scale.setScalar(sc*0.72); _dummy.updateMatrix();
+            folMesh.setMatrixAt(i*2+1,_dummy.matrix);
+        });
+        trnkMesh.instanceMatrix.needsUpdate=true; folMesh.instanceMatrix.needsUpdate=true;
+        gScene.add(trnkMesh); gScene.add(folMesh);
+    }
+
+    // ─ 沙漠：古石柱废墟（倾斜石柱+柱帽，InstancedMesh）──────────────────────
+    if(theme.id==='desert'){
+        const rRng=mulberry32(seed^0xDE5EBED0);
+        const rPos=[];
+        for(let tries=0;tries<500&&rPos.length<10;tries++){
+            const tx=4+Math.floor(rRng()*(MAP_G-8)), tz=4+Math.floor(rRng()*(MAP_G-8));
+            if(grid[tx][tz]) continue;
+            if(SPAWN_SAFE.some(s=>tx>=s.x&&tx<s.x+margin&&tz>=s.z&&tz<s.z+margin)) continue;
+            rPos.push({wx:tx*CELL+CELL/2+(rRng()-0.5)*1.2,wz:tz*CELL+CELL/2+(rRng()-0.5)*1.2,sc:0.55+rRng()*0.5,ry:rRng()*6.28,rx:(rRng()-0.5)*0.28});
+        }
+        const rc=rPos.length;
+        const colGeo=new THREE.CylinderGeometry(0.17,0.22,2.8,8);
+        const capGeo=new THREE.BoxGeometry(0.58,0.22,0.58);
+        const colMat=new THREE.MeshStandardMaterial({color:0x9a7a42,roughness:0.92,metalness:0});
+        const colMesh=new THREE.InstancedMesh(colGeo,colMat,rc);
+        const capMesh=new THREE.InstancedMesh(capGeo,colMat,rc);
+        colMesh.castShadow=true; capMesh.castShadow=true;
+        rPos.forEach(({wx,wz,sc,ry,rx},i)=>{
+            _dummy.position.set(wx,1.4*sc,wz); _dummy.rotation.set(rx,ry,0); _dummy.scale.setScalar(sc); _dummy.updateMatrix();
+            colMesh.setMatrixAt(i,_dummy.matrix);
+            _dummy.position.set(wx+Math.sin(rx)*2.9*sc*0.5,2.9*sc,wz); _dummy.rotation.set(rx,ry,0); _dummy.scale.setScalar(sc); _dummy.updateMatrix();
+            capMesh.setMatrixAt(i,_dummy.matrix);
+        });
+        colMesh.instanceMatrix.needsUpdate=true; capMesh.instanceMatrix.needsUpdate=true;
+        gScene.add(colMesh); gScene.add(capMesh);
     }
 
     // 粒子系统（雪/萤火/沙尘）
