@@ -2692,8 +2692,8 @@ const MAP_THEMES = [
       sun:0xfff0d8, sunI:1.4, amb:0x405060, ambI:0.7, crate:0x7a5820, mm:'#3a4a55', pillar:0x686a6e }, // 城市
     { id:'desert', wall:0xb09060, ground:0x9a8040, sky:0xe0a840, fog:0xd0a040, fogN:20, fogF:90,
       sun:0xffcc88, sunI:1.7, amb:0x604028, ambI:0.5, crate:0xa06028, mm:'#907040', pillar:0xc0a060 }, // 沙漠
-    { id:'forest', wall:0x6a5838, ground:0x2a2010, sky:0x3d5530, fog:0x3d5530, fogN:15, fogF:70,
-      sun:0xfff8e8, sunI:1.0, amb:0x243818, ambI:0.65, crate:0x504028, mm:'#3a5428', pillar:0x5a4830 }, // 丛林
+    { id:'forest', wall:0x6a5838, ground:0x2a2010, sky:0x4a6838, fog:0x3d5530, fogN:15, fogF:75,
+      sun:0xfff8e8, sunI:1.25, amb:0x2a3e1c, ambI:0.75, crate:0x504028, mm:'#3a5428', pillar:0x5a4830 }, // 丛林
     { id:'night',  wall:0x303840, ground:0x1a1e24, sky:0x080d18, fog:0x080d18, fogN:10, fogF:55,
       sun:0x8090b8, sunI:0.4, amb:0x0c1420, ambI:0.5, crate:0x202830, mm:'#1e2d40', pillar:0x404858, hasLights:true }, // 夜战
     { id:'snow',   wall:0xb8c4cc, ground:0xd0dce4, sky:0xa8c4d8, fog:0xc0d8e8, fogN:18, fogF:72,
@@ -2750,9 +2750,9 @@ function initGame(matchData){
         gRenderer.shadowMap.type = THREE.PCFSoftShadowMap;
     }
     gRenderer.setSize(window.innerWidth, window.innerHeight);
-    gRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    gRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     gRenderer.toneMapping = THREE.ACESFilmicToneMapping;
-    gRenderer.toneMappingExposure = 1.08;
+    gRenderer.toneMappingExposure = 0.92;
     gRenderer.outputEncoding = THREE.sRGBEncoding;
 
     const _theme = MAP_THEMES[matchData.mapSeed % MAP_THEMES.length];
@@ -2769,7 +2769,7 @@ function initGame(matchData){
 
     gScene  = new THREE.Scene();
     gScene.background = new THREE.Color(_theme.sky);
-    gScene.fog = new THREE.Fog(_theme.fog, _theme.fogN, _theme.fogF);
+    gScene.fog = new THREE.FogExp2(_theme.fog, 2.8 / _theme.fogF);
 
     gCamera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.1, 200);
     gCamera.rotation.order = 'YXZ';
@@ -2782,7 +2782,7 @@ function initGame(matchData){
     const sun = new THREE.DirectionalLight(_theme.sun, _theme.sunI);
     sun.position.set(30, 60, 20);
     sun.castShadow = true;
-    sun.shadow.mapSize.set(2048,2048);
+    sun.shadow.mapSize.set(1024,1024);
     sun.shadow.camera.near = 1; sun.shadow.camera.far = 200;
     sun.shadow.camera.left = -80; sun.shadow.camera.right = 80;
     sun.shadow.camera.top  =  80; sun.shadow.camera.bottom= -80;
@@ -3172,7 +3172,7 @@ function _mkGroundTex(hex,theme){
     }
     const t=new THREE.CanvasTexture(cv);
     t.wrapS=t.wrapT=THREE.RepeatWrapping;
-    t.repeat.set(MAP_G*0.35,MAP_G*0.35);
+    t.repeat.set(MAP_G*0.25,MAP_G*0.25);
     t.encoding=THREE.sRGBEncoding;
     t.anisotropy=Math.min(8,gRenderer?.capabilities?.getMaxAnisotropy()||4);
     return t;
@@ -3255,7 +3255,7 @@ function buildMap(seed, theme){
     // 地面
     const ground = new THREE.Mesh(
         new THREE.PlaneGeometry(MAP_G*CELL, MAP_G*CELL),
-        new THREE.MeshStandardMaterial({ map: _mkGroundTex(theme.ground,theme), roughness: theme.id==='snow'?0.58:theme.id==='night'?0.80:0.92, metalness: 0.0 })
+        new THREE.MeshPhongMaterial({ map: _mkGroundTex(theme.ground,theme), shininess: theme.id==='snow'?16:theme.id==='night'?6:3, specular: 0x090909 })
     );
     ground.rotation.x = -Math.PI/2;
     ground.position.set(MAP_G*CELL/2, 0, MAP_G*CELL/2);
@@ -3322,7 +3322,7 @@ function buildMap(seed, theme){
     for(let x=0;x<MAP_G;x++) for(let z=0;z<MAP_G;z++) if(grid[x][z]) wallCount++;
 
     const wallGeo = new THREE.BoxGeometry(CELL, 3.2, CELL);
-    const wallMat = new THREE.MeshStandardMaterial({ map: _mkWallTex(theme.wall,theme), roughness: theme.id==='night'?0.32:theme.id==='snow'?0.62:0.86, metalness: theme.id==='night'?0.10:0.0 });
+    const wallMat = new THREE.MeshPhongMaterial({ map: _mkWallTex(theme.wall,theme), shininess: theme.id==='night'?48:theme.id==='snow'?18:5, specular: theme.id==='night'?0x202840:0x0a0a0a });
     const wallMesh = new THREE.InstancedMesh(wallGeo, wallMat, wallCount);
     wallMesh.castShadow = true; wallMesh.receiveShadow = true;
     wallMesh.frustumCulled = false; // BV覆盖全图，跳过无意义剔除检测
@@ -3361,7 +3361,7 @@ function buildMap(seed, theme){
     }
     if(cratePos.length){
         const crateGeo=new THREE.BoxGeometry(2.2,0.9,2.2);
-        const crateMat=new THREE.MeshStandardMaterial({color:theme.crate,roughness:0.85,metalness:0.0});
+        const crateMat=new THREE.MeshPhongMaterial({color:theme.crate,shininess:5,specular:0x080808});
         const crateMesh=new THREE.InstancedMesh(crateGeo,crateMat,cratePos.length);
         crateMesh.castShadow=true; crateMesh.receiveShadow=true;
         cratePos.forEach(({cx,cz,r},i)=>{
@@ -3404,7 +3404,7 @@ function buildMap(seed, theme){
     }
     if(_pPos.length){
         const pGeo=new THREE.CylinderGeometry(0.28,0.32,3.0,8);
-        const pMat=new THREE.MeshStandardMaterial({color:theme.pillar||theme.wall,roughness:0.84,metalness:0.0});
+        const pMat=new THREE.MeshPhongMaterial({color:theme.pillar||theme.wall,shininess:6,specular:0x0a0a0a});
         const pMesh=new THREE.InstancedMesh(pGeo,pMat,_pPos.length);
         pMesh.castShadow=true; pMesh.receiveShadow=true;
         _pPos.forEach(({px,pz},i)=>{
@@ -3420,15 +3420,20 @@ function buildMap(seed, theme){
     if(theme.hasLights){
         const neons=[0x4060ff,0xff2255,0x22ffaa,0xffaa20];
         const lr=mulberry32(seed^0xCAFE1234);
+        const bulbGeo=new THREE.SphereGeometry(0.15,8,5);
         let placed=0, ntries=0;
         while(placed<6 && ntries<200){
             ntries++;
             const lx=(3+Math.floor(lr()*(MAP_G-6)))*CELL+CELL/2;
             const lz=(3+Math.floor(lr()*(MAP_G-6)))*CELL+CELL/2;
             if(!grid[Math.floor(lx/CELL)]?.[Math.floor(lz/CELL)]){
-                const pl=new THREE.PointLight(neons[placed%neons.length],5,14);
+                const col=neons[placed%neons.length];
+                const pl=new THREE.PointLight(col,7,18);
                 pl.position.set(lx,1.5,lz);
                 gScene.add(pl);
+                const bulb=new THREE.Mesh(bulbGeo,new THREE.MeshPhongMaterial({color:col,emissive:col,emissiveIntensity:1,shininess:80}));
+                bulb.position.set(lx,1.5,lz);
+                gScene.add(bulb);
                 placed++;
             }
         }
@@ -3437,7 +3442,7 @@ function buildMap(seed, theme){
     // ─ 地形装饰（岩石/瓦砾/冰块，按主题变化，独立RNG）
     const _dRng=mulberry32(seed^0xD3C0BA5E);
     const rockCol=theme.id==='snow'?0xb0bcc8:theme.id==='desert'?0x8a6030:theme.id==='forest'?0x5a4830:theme.id==='night'?0x303848:0x525252;
-    const rockMat=new THREE.MeshStandardMaterial({color:rockCol,roughness:0.88,metalness:0.0});
+    const rockMat=new THREE.MeshPhongMaterial({color:rockCol,shininess:4,specular:0x060606});
     const rockGeo=new THREE.DodecahedronGeometry(1,0);
     const rockCount=8;
     const rockMesh=new THREE.InstancedMesh(rockGeo,rockMat,rockCount*3);
@@ -3464,7 +3469,7 @@ function buildMap(seed, theme){
     const _bRng=mulberry32(seed^0xBAD1DEA5);
     const barrelGeo=new THREE.CylinderGeometry(0.13,0.15,0.44,10);
     const barrelCol=theme.id==='night'?0x304050:theme.id==='desert'?0x8a6030:theme.id==='forest'?0x3a4a25:theme.id==='snow'?0x606878:0x506070;
-    const barrelMat=new THREE.MeshStandardMaterial({color:barrelCol,roughness:0.62,metalness:0.18});
+    const barrelMat=new THREE.MeshPhongMaterial({color:barrelCol,shininess:32,specular:0x282828});
     const barrelMesh=new THREE.InstancedMesh(barrelGeo,barrelMat,14);
     barrelMesh.castShadow=true; barrelMesh.receiveShadow=true;
     let bFilled=0,bTries=0;
@@ -3485,7 +3490,7 @@ function buildMap(seed, theme){
     // ─ 木箱/弹药箱（散布场景提供掩体）──────────────────────────────────────
     const _cRng=mulberry32(seed^0xC4A7E0F3);
     const crateGeo=new THREE.BoxGeometry(0.48,0.48,0.48);
-    const crateMat=new THREE.MeshStandardMaterial({color:theme.crate||0x6a5828,roughness:0.88,metalness:0.0});
+    const crateMat=new THREE.MeshPhongMaterial({color:theme.crate||0x6a5828,shininess:5});
     const crateMesh=new THREE.InstancedMesh(crateGeo,crateMat,10);
     crateMesh.castShadow=true; crateMesh.receiveShadow=true;
     let cFilled=0,cTries=0;
@@ -3505,7 +3510,7 @@ function buildMap(seed, theme){
     if(theme.id==='snow'){
         const iceRng=mulberry32(seed^0x1CE55AFF);
         const iceGeo=new THREE.CylinderGeometry(0.06,0.12,1.2,6);
-        const iceMat=new THREE.MeshStandardMaterial({color:0xd0eeff,roughness:0.08,metalness:0.0,transparent:true,opacity:0.68});
+        const iceMat=new THREE.MeshPhongMaterial({color:0xd0eeff,shininess:90,specular:0x6080a0,transparent:true,opacity:0.68});
         const iceMesh=new THREE.InstancedMesh(iceGeo,iceMat,12);
         let iIdx=0, iTries=0;
         while(iIdx<12&&iTries<300){ iTries++;
@@ -3531,9 +3536,9 @@ function buildMap(seed, theme){
         }
         const tc=tPos.length;
         const trnkGeo=new THREE.CylinderGeometry(0.12,0.19,2.4,7);
-        const trnkMat=new THREE.MeshStandardMaterial({color:0x3a2510,roughness:0.93,metalness:0});
+        const trnkMat=new THREE.MeshPhongMaterial({color:0x3a2510,shininess:3});
         const folGeo=new THREE.SphereGeometry(0.88,7,5);
-        const folMat=new THREE.MeshStandardMaterial({color:0x223812,roughness:0.95,metalness:0});
+        const folMat=new THREE.MeshPhongMaterial({color:0x223812,shininess:2});
         const trnkMesh=new THREE.InstancedMesh(trnkGeo,trnkMat,tc);
         const folMesh=new THREE.InstancedMesh(folGeo,folMat,tc*2);
         trnkMesh.castShadow=true; trnkMesh.receiveShadow=true;
@@ -3563,7 +3568,7 @@ function buildMap(seed, theme){
         const rc=rPos.length;
         const colGeo=new THREE.CylinderGeometry(0.17,0.22,2.8,8);
         const capGeo=new THREE.BoxGeometry(0.58,0.22,0.58);
-        const colMat=new THREE.MeshStandardMaterial({color:0x9a7a42,roughness:0.92,metalness:0});
+        const colMat=new THREE.MeshPhongMaterial({color:0x9a7a42,shininess:4,specular:0x080808});
         const colMesh=new THREE.InstancedMesh(colGeo,colMat,rc);
         const capMesh=new THREE.InstancedMesh(capGeo,colMat,rc);
         colMesh.castShadow=true; capMesh.castShadow=true;
